@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import type { Activity, Timesheet } from '../../shared/types';
-import { STATUS_LABELS } from '../../shared/types';
-import { monthDays } from '../../shared/holidays';
+import type { Activity, Timesheet } from '../../../../shared/types';
+import { STATUS_LABELS } from '../../../../shared/types';
+import { monthDays } from '../../../../shared/holidays';
 
 const ORCHID = rgb(0.486, 0.361, 0.749); // #7C5CBF
 const INK = rgb(0.106, 0.137, 0.251); // #1B2340
@@ -11,9 +11,37 @@ const LINE = rgb(0.88, 0.89, 0.92);
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 const WEEKDAYS = ['', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
-/** Helvetica standard = WinAnsi : on remplace les caractères non encodables. */
+/** Helvetica standard = WinAnsi : on garde les caractères encodables (dont œ, guillemets, …), le reste devient « ? ». */
 function safe(text: string): string {
-  return text.replace(/[^\x20-\x7E -ÿ–—’€]/g, '?');
+  return text
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/[^\x20-\x7E -ÿŒœŠšŸŽž–—‘’‚“”„•…€™]/g, '?');
+}
+
+/** Tronque le texte (avec « … ») pour qu'il tienne dans la largeur donnée. */
+function fit(text: string, width: number, f: PDFFont, size: number): string {
+  let t = safe(text);
+  if (f.widthOfTextAtSize(t, size) <= width) return t;
+  while (t.length > 1 && f.widthOfTextAtSize(`${t}…`, size) > width) t = t.slice(0, -1);
+  return `${t.trimEnd()}…`;
+}
+
+/** Découpe un texte en lignes de largeur maximale donnée. */
+function wrap(text: string, width: number, f: PDFFont, size: number): string[] {
+  const lines: string[] = [];
+  for (const paragraph of text.split(/\r?\n/)) {
+    let line = '';
+    for (const word of safe(paragraph).split(' ')) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (f.widthOfTextAtSize(candidate, size) <= width) line = candidate;
+      else {
+        if (line) lines.push(line);
+        line = fit(word, width, f, size);
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
 }
 
 export function monthLabel(month: string): string {
@@ -78,8 +106,8 @@ export async function renderTimesheetPdf(input: { consultant: string; timesheet:
     const a = acts.get(id);
     ensure(14);
     rule();
-    text(a?.missionLabel ? `${a.missionLabel} – ${a.clientName ?? ''}` : 'Absence', M, 10);
-    text(a?.label ?? id, 300, 10);
+    text(fit(a?.missionLabel ? `${a.missionLabel} – ${a.clientName ?? ''}` : 'Absence', 240, font, 10), M, 10);
+    text(fit(a?.label ?? id, 170, font, 10), 300, 10);
     text(qty.toLocaleString('fr-FR'), 480, 10);
     y -= 14;
   }
@@ -103,7 +131,7 @@ export async function renderTimesheetPdf(input: { consultant: string; timesheet:
     const a = acts.get(e.activityId);
     rule();
     text(`${WEEKDAYS[d?.weekday ?? 0]} ${e.date.split('-').reverse().join('/')}`, M, 9.5);
-    text(a ? (a.missionLabel ? `${a.missionLabel} · ${a.label}` : a.label) : e.activityId, 160, 9.5);
+    text(fit(a ? (a.missionLabel ? `${a.missionLabel} · ${a.label}` : a.label) : e.activityId, 310, font, 9.5), 160, 9.5);
     text(e.quantity === 1 ? '1' : '0,5', 480, 9.5);
     y -= 14;
   }
@@ -117,18 +145,23 @@ export async function renderTimesheetPdf(input: { consultant: string; timesheet:
     for (const v of ts.validations) {
       const label = v.status === 'VALIDE' ? 'Validé' : v.status === 'REJETE' ? 'Rejeté' : 'En attente';
       const when = v.decidedAt ? ` le ${new Date(v.decidedAt).toLocaleDateString('fr-FR')}` : '';
-      text(`${v.missionLabel} (${v.clientName}) : ${label}${when}`, M, 10);
+      text(fit(`${v.missionLabel} (${v.clientName}) : ${label}${when}`, 595.28 - 2 * M, font, 10), M, 10);
       y -= 14;
     }
     y -= 10;
   }
 
   if (ts.comment) {
-    ensure(40);
+    const lines = wrap(ts.comment, 595.28 - 2 * M, font, 10).slice(0, 25);
+    ensure(30 + lines.length * 13);
     text('Commentaire', M, 12, bold, ORCHID);
     y -= 16;
-    text(ts.comment.slice(0, 110), M, 10);
-    y -= 24;
+    for (const line of lines) {
+      ensure(13);
+      text(line, M, 10);
+      y -= 13;
+    }
+    y -= 11;
   }
 
   // Cadres de signature

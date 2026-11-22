@@ -1,42 +1,57 @@
-import { Hono } from 'hono';
+import { swaggerUI } from '@hono/swagger-ui';
 import { secureHeaders } from 'hono/secure-headers';
-import type { AppEnv } from './env';
-import { auth, requireAdmin, requireUser } from './auth';
-import { timesheets } from './routes/timesheets';
-import { validation } from './routes/validation';
-import { admin } from './routes/admin';
+import type { AppEnv, Bindings } from './env';
+import { onError } from './core/errors';
+import { newRouter } from './core/router';
+import { scheduled } from './cron';
+import { adminRoutes } from './modules/admin/admin.routes';
+import { authRoutes } from './modules/auth/auth.routes';
+import { timesheetRoutes } from './modules/timesheets/timesheets.routes';
+import { validationRoutes } from './modules/validation/validation.routes';
 
-const app = new Hono<AppEnv>();
+export const app = newRouter();
 
 app.use('/api/*', secureHeaders());
 
-// Protection CSRF simple : les requêtes d'écriture doivent venir de l'app elle-même.
+// Protection CSRF : les requêtes d'écriture doivent venir de l'app elle-même (en plus du cookie SameSite=Lax).
 app.use('/api/*', async (c, next) => {
   if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
     const origin = c.req.header('origin');
-    if (origin && origin !== new URL(c.env.APP_URL).origin && origin !== new URL(c.req.url).origin) {
+    const site = c.req.header('sec-fetch-site');
+    const allowed = [new URL(c.env.APP_URL).origin, new URL(c.req.url).origin];
+    if ((origin && !allowed.includes(origin)) || site === 'cross-site') {
       return c.json({ error: 'Origine refusée' }, 403);
     }
   }
   await next();
 });
 
+// Documentation OpenAPI (Swagger) : uniquement si API_DOCS=true (dev).
+app.use('/api/docs', async (c, next) => (c.env.API_DOCS === 'true' ? next() : c.json({ error: 'Introuvable' }, 404)));
+app.use('/api/openapi.json', async (c, next) => (c.env.API_DOCS === 'true' ? next() : c.json({ error: 'Introuvable' }, 404)));
+
 app.get('/api/health', (c) => c.json({ ok: true }));
-app.route('/api/auth', auth);
-app.route('/api/public/validations', validation);
+app.route('/api/auth', authRoutes);
+app.route('/api/public/validations', validationRoutes);
+app.route('/api/admin', adminRoutes);
 
-app.use('/api/admin/*', requireUser, requireAdmin);
-app.route('/api/admin', admin);
-
-app.use('/api/*', requireUser);
-app.route('/api', timesheets);
-
-app.notFound((c) => (c.req.path.startsWith('/api/') ? c.json({ error: 'Introuvable' }, 404) : c.env.ASSETS ? c.env.ASSETS.fetch(c.req.raw) : c.text('Not found', 404)));
-
-app.onError((err, c) => {
-  console.error(err);
-  return c.json({ error: 'Erreur serveur' }, 500);
+app.doc('/api/openapi.json', {
+  openapi: '3.1.0',
+  info: { title: 'Orkidea CRA', version: '2.0.0', description: 'API des comptes rendus d’activité. Authentification par cookie de session (lien magique).' },
 });
+app.get('/api/docs', swaggerUI({ url: '/api/openapi.json' }));
 
-export default app;
+// En dernier : son middleware requireUser s'applique à toutes les autres routes /api/*.
+app.route('/api', timesheetRoutes);
 
+app.notFound((c) =>
+  c.req.path.startsWith('/api/') ? c.json({ error: 'Introuvable' }, 404) : c.env.ASSETS ? c.env.ASSETS.fetch(c.req.raw) : c.text('Not found', 404),
+);
+app.onError(onError);
+
+export default {
+  fetch: app.fetch,
+  scheduled,
+} satisfies ExportedHandler<Bindings>;
+
+export type { AppEnv };

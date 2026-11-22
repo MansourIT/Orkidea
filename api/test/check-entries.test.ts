@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { checkEntries } from '../src/lib/timesheets';
-import type { Entry } from '../../shared/types';
+import { checkEntries } from '../src/modules/timesheets/check-entries';
+import type { Activity, Entry } from '../../shared/types';
+import type { DayRules } from '../../shared/settings';
 
-type Acts = Parameters<typeof checkEntries>[2];
+const STRICT: DayRules = { weekend: 'INTERDIT', holidays: 'INTERDIT', workedHolidays: [], region: 'metropole' };
 
-const acts: Acts = [
-  { id: 'dev', missionId: 'm1', missionLabel: 'Alpha', clientName: 'C', label: 'Dev', kind: 'travail', color: '#000', missionStart: '2026-11-05', missionEnd: '2026-11-20' },
-  { id: 'cp', missionId: null, missionLabel: null, clientName: null, label: 'CP', kind: 'absence', color: '#000', missionStart: null, missionEnd: null },
+const acts: Activity[] = [
+  { id: 'dev', missionId: 'm1', missionLabel: 'Alpha', clientName: 'C', label: 'Dev', kind: 'travail', color: '#000', startDate: '2026-11-05', endDate: '2026-11-20', rules: STRICT },
+  { id: 'cp', missionId: null, missionLabel: null, clientName: null, label: 'CP', kind: 'absence', color: '#000', startDate: null, endDate: null, rules: STRICT },
+  { id: 'astreinte', missionId: 'm2', missionLabel: 'Beta', clientName: 'C', label: 'Astreinte', kind: 'travail', color: '#000', startDate: null, endDate: null, rules: { ...STRICT, weekend: 'AUTORISE', workedHolidays: ['armistice'] } },
 ];
 
 const e = (date: string, activityId = 'dev', quantity: number = 1) => ({ date, activityId, quantity }) as Entry;
@@ -43,5 +45,14 @@ describe('checkEntries', () => {
   it('refuse un format invalide ou trop de lignes', () => {
     expect(checkEntries('2026-11', 'x' as unknown as Entry[], acts)).toEqual(['Format de saisie invalide']);
     expect(checkEntries('2026-11', Array.from({ length: 125 }, () => e('2026-11-10', 'cp', 0.5)), acts)).toEqual(['Trop de lignes de saisie']);
+  });
+
+  it('refuse les week-ends et jours fériés sauf si la mission l’autorise', () => {
+    expect(checkEntries('2026-11', [e('2026-11-14'), e('2026-11-11'), e('2026-11-07', 'cp')], acts)).toEqual([
+      'Le 14/11/2026 est un week-end : saisie non autorisée pour Alpha · Dev',
+      'Le 11/11/2026 est férié (Armistice 1918) : saisie non autorisée pour Alpha · Dev',
+      'Le 07/11/2026 est un week-end : saisie non autorisée pour CP',
+    ]);
+    expect(checkEntries('2026-11', [e('2026-11-14', 'astreinte'), e('2026-11-11', 'astreinte')], acts)).toEqual([]);
   });
 });

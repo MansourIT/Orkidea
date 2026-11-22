@@ -10,6 +10,9 @@ export interface CallOptions {
   body?: unknown;
   cookie?: string;
   origin?: string;
+  /** IP cliente (limiteur de débit) ; aléatoire par défaut pour ne pas mélanger les tests. */
+  ip?: string;
+  base?: string;
 }
 
 /** Appelle le Worker comme le ferait le navigateur, et attend les tâches waitUntil (emails). */
@@ -18,7 +21,8 @@ export async function call(path: string, opts: CallOptions = {}): Promise<Respon
   if (opts.body !== undefined) headers.set('content-type', 'application/json');
   if (opts.cookie) headers.set('cookie', opts.cookie);
   if (opts.origin) headers.set('origin', opts.origin);
-  const req = new Request(`${BASE}${path}`, {
+  headers.set('cf-connecting-ip', opts.ip ?? `10.0.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`);
+  const req = new Request(`${opts.base ?? BASE}${path}`, {
     method: opts.method ?? 'GET',
     headers,
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
@@ -58,9 +62,8 @@ export async function login(email: string): Promise<string> {
   expect(res.status).toBe(200);
   const link = mails.at(-1)?.links[0];
   expect(link).toBeDefined();
-  const url = new URL(link!);
-  const cb = await call(`${url.pathname}${url.search}`);
-  expect(cb.status).toBe(302);
+  const cb = await call('/api/auth/callback', { method: 'POST', body: { token: loginToken(link!) } });
+  expect(cb.status).toBe(200);
   const setCookie = cb.headers.get('set-cookie') ?? '';
   const cookie = setCookie.split(';')[0];
   expect(cookie).toMatch(/^ork_session=/);
@@ -88,4 +91,11 @@ export const WEEK1 = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2
 /** Extrait le jeton d'un lien de validation client. */
 export function validationToken(link: string): string {
   return decodeURIComponent(new URL(link).pathname.split('/').pop()!);
+}
+
+/** Jeton d'un lien de connexion (/connexion?token=…). */
+export function loginToken(link: string): string {
+  const url = new URL(link);
+  expect(url.pathname).toBe('/connexion');
+  return url.searchParams.get('token')!;
 }

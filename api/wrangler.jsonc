@@ -24,6 +24,10 @@
     "APP_URL": "https://app.orkidea.fr",
     "MAIL_FROM": "Orkidea CRA <cra@orkidea.fr>"
   },
+  // Limiteur de débit sur la demande de lien de connexion (10 requêtes / minute / IP).
+  "ratelimits": [{ "name": "LOGIN_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
+  // Tâche quotidienne (UTC) : purge des sessions et liens expirés.
+  "triggers": { "crons": ["17 3 * * *"] },
   "routes": [{ "pattern": "app.orkidea.fr", "custom_domain": true }],
   "observability": { "enabled": true }
 }

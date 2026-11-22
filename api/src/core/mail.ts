@@ -1,4 +1,5 @@
-import type { Bindings } from '../env';
+import type { Context } from 'hono';
+import type { AppEnv, Bindings } from '../env';
 
 export interface Mail {
   to: string;
@@ -9,15 +10,17 @@ export interface Mail {
 
 /**
  * Envoi via l'API transactionnelle Brevo.
- * En local (MAIL_DEV_LOG="true") ou sans clé, l'email est affiché dans la console.
+ * En local (MAIL_DEV_LOG="true"), l'email est affiché dans la console.
+ * Sans clé Brevo hors mode dev : erreur (jamais de lien de connexion dans les logs de production).
  */
 export async function sendMail(env: Bindings, mail: Mail): Promise<void> {
-  if (env.MAIL_DEV_LOG === 'true' || !env.BREVO_API_KEY) {
-    const links = [...mail.html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+  if (env.MAIL_DEV_LOG === 'true') {
+    const links = [...mail.html.matchAll(/href="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
     const text = mail.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     console.log(`\n[MAIL] À: ${mail.to}\n[MAIL] Objet: ${mail.subject}\n[MAIL] ${text}\n${links.map((l) => `[MAIL] Lien: ${l}`).join('\n')}\n`);
     return;
   }
+  if (!env.BREVO_API_KEY) throw new Error('BREVO_API_KEY absente : email non envoyé');
   const match = /^(.*)<(.+)>$/.exec(env.MAIL_FROM.trim());
   const sender = match ? { name: match[1].trim(), email: match[2].trim() } : { email: env.MAIL_FROM };
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -35,6 +38,11 @@ export async function sendMail(env: Bindings, mail: Mail): Promise<void> {
   }
 }
 
+/** Envoi après la réponse (waitUntil) : le temps de réponse ne dépend pas de l'envoi. */
+export function sendInBackground(c: Context<AppEnv>, mail: Mail, label: string): void {
+  c.executionCtx.waitUntil(sendMail(c.env, mail).catch((err: Error) => console.error(`Envoi email (${label}) : ${err.message}`)));
+}
+
 export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
@@ -46,6 +54,5 @@ export function layout(title: string, body: string): string {
 }
 
 export function button(href: string, label: string): string {
-  return `<p><a href="${href}" style="display:inline-block;background:#7C5CBF;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">${escapeHtml(label)}</a></p>`;
+  return `<p><a href="${escapeHtml(href)}" style="display:inline-block;background:#7C5CBF;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">${escapeHtml(label)}</a></p>`;
 }
-

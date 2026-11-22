@@ -1,7 +1,7 @@
 // Reprise automatisée du scénario validé manuellement (section 5 du cahier des charges).
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Entry, Timesheet } from '../../shared/types';
-import { ADMIN, CONSULTANT, MONTH, WEEK1, call, captureMails, json, login, save, validationToken } from './helpers';
+import { ADMIN, CONSULTANT, MONTH, WEEK1, call, captureMails, json, login, loginToken, save, validationToken } from './helpers';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -49,17 +49,17 @@ describe('Accès et authentification', () => {
   it('connecte par lien magique et refuse sa réutilisation', async () => {
     const mails = captureMails();
     await call('/api/auth/login', { method: 'POST', body: { email: CONSULTANT } });
-    const url = new URL(mails[0].links[0]);
-    const first = await call(url.pathname + url.search);
-    expect(first.status).toBe(302);
-    expect(first.headers.get('location')).toBe('/');
+    const token = loginToken(mails[0].links[0]);
+    const first = await call('/api/auth/callback', { method: 'POST', body: { token } });
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ email: CONSULTANT, role: 'consultant' });
     const cookieHeader = first.headers.get('set-cookie') ?? '';
     expect(cookieHeader).toMatch(/HttpOnly/i);
     expect(cookieHeader).toMatch(/SameSite=Lax/i);
 
-    const again = await call(url.pathname + url.search);
-    expect(again.status).toBe(302);
-    expect(again.headers.get('location')).toBe('/login?erreur=lien');
+    const again = await call('/api/auth/callback', { method: 'POST', body: { token } });
+    expect(again.status).toBe(400);
+    expect(await again.json()).toMatchObject({ code: 'LIEN_INVALIDE' });
 
     const me = await call('/api/auth/me', { cookie: cookieHeader.split(';')[0] });
     expect(await me.json()).toMatchObject({ email: CONSULTANT, role: 'consultant' });

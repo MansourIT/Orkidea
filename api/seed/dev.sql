@@ -18,3 +18,13 @@ INSERT INTO activities (id, mission_id, label, kind, color) VALUES
   ('a-beta-dev',   'm-beta',  'Développement', 'travail', '#A855F7'),
   ('a-beta-doc',   'm-beta',  'Documentation', 'travail', '#A855F7');
 
+
+-- Mission Gamma (maquette TimeFlow) : sans validation client.
+INSERT INTO clients (id, name) VALUES ('c-gamma', 'Client Gamma');
+
+INSERT INTO missions (id, consultant_id, client_id, label, start_date, tjm, client_validation) VALUES
+  ('m-gamma', 'u-jd', 'c-gamma', 'Projet Gamma', '2026-01-01', 480, 0);
+
+INSERT INTO activities (id, mission_id, label, kind, color) VALUES
+  ('a-gamma-sup',  'm-gamma', 'Support',   'travail', '#22C55E'),
+  ('a-gamma-for',  'm-gamma', 'Formation', 'travail', '#22C55E');
