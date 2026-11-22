@@ -217,12 +217,39 @@ export class TimesheetStore {
     this.setDay(date, (this.byDate().get(date) ?? []).filter((e) => e.activityId !== activityId));
   }
 
-  /** Vue tableau : cycle vide → ½ → 1 → vide, ou valeur explicite. */
-  setCell(date: string, activityId: string, quantity: 0 | 0.5 | 1): void {
-    if (!this.editable()) return;
+  /**
+   * Vue tableau : fixe la quantité d'une activité un jour donné (0 = vide).
+   * Mêmes règles de jours que le pinceau ; le total > 1 j est permis temporairement mais signalé (rouge)
+   * et refusé par le serveur à l'enregistrement.
+   */
+  setCell(date: string, activityId: string, quantity: 0 | 0.5 | 1): boolean {
+    if (!this.editable()) return false;
+    const a = this.activityById().get(activityId);
+    if (quantity > 0 && a) {
+      const refusal = dayRefusal(date, a);
+      if (refusal) {
+        this.notice.set({ text: refusal, tone: 'erreur' });
+        return false;
+      }
+    }
     const others = (this.byDate().get(date) ?? []).filter((e) => e.activityId !== activityId);
     this.setDay(date, quantity ? [...others, { date, activityId, quantity }] : others);
+    return true;
   }
+
+  /** Quantité saisie pour une activité un jour donné (0 si rien). */
+  quantityAt(date: string, activityId: string): 0 | 0.5 | 1 {
+    return this.byDate().get(date)?.find((e) => e.activityId === activityId)?.quantity ?? 0;
+  }
+
+  /** Cycle vide → ½ → 1 → vide. */
+  cycleCell(date: string, activityId: string): boolean {
+    const next = ({ 0: 0.5, 0.5: 1, 1: 0 } as const)[this.quantityAt(date, activityId)];
+    return this.setCell(date, activityId, next);
+  }
+
+  /** Dates dont le total dépasse 1 jour (possible uniquement via la vue tableau). */
+  readonly overLimitDays = computed(() => this.days().filter((d) => d.total > 1).map((d) => d.date));
 
   setComment(value: string): void {
     this.comment.set(value === '' ? null : value);

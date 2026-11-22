@@ -10,6 +10,7 @@ import { StatusBadge } from '../../ui/status-badge';
 import { ActivityPanel } from './activity-panel';
 import { CalendarGrid } from './calendar-grid';
 import { StatusBanners } from './status-banners';
+import { TableView } from './table-view';
 import { TimesheetStore } from './timesheet.store';
 
 type View = 'calendrier' | 'tableau';
@@ -17,7 +18,7 @@ type View = 'calendrier' | 'tableau';
 /** Écran « Saisie des temps » (maquette TimeFlow adaptée aux règles CRA). */
 @Component({
   selector: 'app-timesheet-page',
-  imports: [RouterLink, NgIcon, StatusBadge, ActivityPanel, CalendarGrid, StatusBanners],
+  imports: [RouterLink, NgIcon, StatusBadge, ActivityPanel, CalendarGrid, StatusBanners, TableView],
   providers: [TimesheetStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
@@ -105,6 +106,11 @@ type View = 'calendrier' | 'tableau';
               </button>
             </div>
 
+            @if (view() === 'tableau') {
+              <p class="my-4 text-xs text-ink-soft">
+                @if (store.editable()) { Cliquez sur une case pour faire défiler vide → ½ → 1, ou tapez 1, 5 (½) ou 0 au clavier. } @else { Lecture seule. }
+              </p>
+            } @else {
             <div class="my-4 flex min-h-9 flex-wrap items-center justify-between gap-2">
               <p class="text-xs text-ink-soft" aria-live="polite">
                 @switch (brushKind()) {
@@ -123,11 +129,12 @@ type View = 'calendrier' | 'tableau';
                 </button>
               }
             </div>
+            }
 
             @if (view() === 'calendrier') {
               <app-calendar-grid />
             } @else {
-              <div class="rounded-xl border border-dashed border-slate-300 p-10 text-center text-sm text-ink-soft">Vue tableau : étape 5.</div>
+              <app-table-view />
             }
 
             <div class="mt-6">
@@ -172,7 +179,9 @@ export class TimesheetPage implements HasUnsavedChanges {
   protected readonly prevMonth = computed(() => addMonths(this.month(), -1));
   protected readonly nextMonth = computed(() => addMonths(this.month(), 1));
   protected readonly pdfUrl = computed(() => this.api.pdfUrl(this.month()));
-  protected readonly submitBlocked = computed(() => this.store.timesheet()?.submissionBlockedReason ?? null);
+  protected readonly submitBlocked = computed(
+    () => this.store.timesheet()?.submissionBlockedReason ?? (this.store.overLimitDays().length ? 'Plus d’une journée saisie sur certains jours' : null),
+  );
 
   protected readonly brushKind = computed(() => this.store.brush()?.kind ?? null);
   protected readonly brushName = computed(() => {
