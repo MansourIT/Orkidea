@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '@angular/cdk/overlay-prebuilt.css';
 
 /* Charte Orkidea */
 @theme {
@@ -70,3 +71,9 @@
 
 @utility alert-error { @apply alert border-red-200 bg-red-50 text-red-900;
 }
+
+/* Jour non ouvré rendu saisissable par la mission du pinceau actif */
+.cell-hatched {
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgb(124 92 191 / 0.08) 6px 12px);
+}
+

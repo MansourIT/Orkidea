@@ -4,6 +4,7 @@ import { isValidMonth } from '@shared/holidays';
 import { inject } from '@angular/core';
 import { Router, type CanActivateFn } from '@angular/router';
 import { adminGuard, authGuard, guestGuard } from './core/guards';
+import { unsavedChangesGuard } from './core/unsaved-changes.guard';
 import { Shell } from './layout/shell';
 
 const T = (s: string) => `${s} · Orkidea CRA`;
@@ -32,6 +33,8 @@ export const routes: Routes = [
         path: 'saisie/:month',
         title: T('Saisie des temps'),
         canActivate: [validMonth],
+        canDeactivate: [unsavedChangesGuard],
+        data: { recreateOnParamChange: true },
         loadComponent: () => import('./features/timesheet/timesheet-page').then((m) => m.TimesheetPage),
       },
       { path: 'tableau-de-bord', title: T('Tableau de bord'), loadComponent: () => import('./features/dashboard/dashboard-page').then((m) => m.DashboardPage) },
