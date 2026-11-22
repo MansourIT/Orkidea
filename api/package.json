@@ -1,0 +1,25 @@
+{
+  "name": "orkidea-cra-api",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "wrangler dev",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "db:migrate:local": "wrangler d1 migrations apply orkidea-cra --local",
+    "db:seed:local": "wrangler d1 execute orkidea-cra --local --file=seed/dev.sql",
+    "db:migrate:remote": "wrangler d1 migrations apply orkidea-cra --remote",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.13.20",
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261121.1",
+    "typescript": "~6.0.3",
+    "vitest": "~4.1.12",
+    "wrangler": "^4.166.0"
+  },
+  "private": true,
+  "type": "module"
+}

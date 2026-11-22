@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "orkidea-cra",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // Un seul Worker sert le front Angular (assets statiques) ET l'API /api/*.
+  "assets": {
+    "directory": "../front/dist/front/browser",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "orkidea-cra",
+      // Remplacer par l'id renvoyé par : npx wrangler d1 create orkidea-cra --jurisdiction eu
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "APP_URL": "https://app.orkidea.fr",
+    "MAIL_FROM": "Orkidea CRA <cra@orkidea.fr>"
+  },
+  "routes": [{ "pattern": "app.orkidea.fr", "custom_domain": true }],
+  "observability": { "enabled": true }
+}
+
