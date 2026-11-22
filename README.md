@@ -7,7 +7,7 @@ Un seul Cloudflare Worker sert le front Angular (assets statiques) et l'API Hono
 
 ```
 api/      Worker Hono (API), migrations D1, seed de démo
-front/    Front Angular (à venir) — build vers front/dist/front/browser
+front/    Front Angular 22 (standalone, signals, zoneless, Tailwind 4, CDK) — build vers front/dist/front/browser
 shared/   Types et calcul des jours fériés, partagés API / front
 scripts/  Outils (page provisoire tant que le front n'est pas construit)
 ```
@@ -33,6 +33,19 @@ En local (`MAIL_DEV_LOG=true`), les emails ne sont pas envoyés : ils sont affic
 
 Comptes de démo : `contact@orkidea.fr` (admin), `jean.dupont@example.com` (consultant).
 
+### Développement complet (API + front)
+
+Dans deux terminaux :
+
+```bash
+npm run dev:api      # wrangler dev, http://localhost:8787
+npm run dev:front    # ng serve, http://localhost:4200 (proxy /api → 8787, voir front/proxy.conf.json)
+```
+
+Ouvrir http://localhost:4200, saisir `jean.dupont@example.com`, puis copier le lien `[MAIL] Lien: http://localhost:4200/connexion?token=…` affiché dans la console de `wrangler dev`.
+
+Pour tester le build de production servi par le Worker (même origine, en-têtes de sécurité de `front/public/_headers`) : `npm run build`, puis `npm run dev:api` avec `APP_URL=http://localhost:8787` et ouvrir http://localhost:8787.
+
 Le mode de développement complet (front Angular sur le port 4200 avec proxy `/api`) suppose `APP_URL=http://localhost:4200` dans `api/.dev.vars` (valeur de `.dev.vars.example`) : les liens des emails et le contrôle d'origine s'appuient dessus. Pour tester l'API seule avec curl, mettez `APP_URL=http://localhost:8787`.
 
 Documentation interactive de l'API (Swagger) : http://localhost:8787/api/docs (uniquement si `API_DOCS=true`).
@@ -41,8 +54,25 @@ Documentation interactive de l'API (Swagger) : http://localhost:8787/api/docs (u
 
 ```bash
 npm run typecheck
-npm test            # tests d'intégration de l'API (D1 local, migrations + seed avant chaque test)
+npm test            # API (D1 local, migrations + seed avant chaque test) puis front (Vitest)
+npm run build       # build de production du front
 ```
+
+## Organisation du front
+
+```
+front/src/
+  assets/logo.svg     logo (placeholder à remplacer par le logo définitif, même nom)
+  styles.css          charte Orkidea (Tailwind 4 : couleurs orchid / ink / amber, composants btn, card, input, alert)
+  app/
+    core/             client API typé (types de shared/), état d'authentification (signals), gardes, intercepteur 401
+    layout/           barre supérieure (logo, tableau de bord, administration, menu avatar)
+    ui/               icônes Lucide enregistrées
+    features/         login + connexion, saisie, tableau de bord, admin, validation client
+```
+
+- Code partagé importé via l'alias `@shared/*` (`../shared`).
+- Sécurité : `front/public/_headers` (CSP stricte sans script inline, `frame-ancestors 'none'`, `Referrer-Policy: no-referrer` pour ne pas divulguer les jetons des liens). L'inlining du CSS critique est désactivé car il repose sur un script inline.
 
 ## Organisation de l'API
 
