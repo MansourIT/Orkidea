@@ -16,7 +16,18 @@ import type {
   TimesheetSummary,
   User,
 } from '@shared/types';
-import type { AppSettings } from '@shared/settings';
+import type { AppSettings, MissionCalendarOverrides } from '@shared/settings';
+
+/** Champs modifiables d'une mission (création et modification). */
+export interface MissionInput extends MissionCalendarOverrides {
+  label: string;
+  startDate: string;
+  endDate: string | null;
+  tjm: number | null;
+  clientValidation: boolean;
+  validatorName: string | null;
+  validatorEmail: string | null;
+}
 
 /** Client HTTP typé de l'API (même origine : cookie de session automatique). */
 @Injectable({ providedIn: 'root' })
@@ -65,9 +76,14 @@ export class Api {
   updateUser = (id: string, body: Partial<Omit<AdminUser, 'id'>>) => this.send<AdminUser>('PATCH', `/api/admin/users/${id}`, body);
   clients = () => this.get<Client[]>('/api/admin/clients');
   createClient = (body: { name: string; siret?: string | null }) => this.send<{ id: string }>('POST', '/api/admin/clients', body);
+  updateClient = (id: string, body: { name?: string; siret?: string | null }) => this.send<Client>('PATCH', `/api/admin/clients/${id}`, body);
+  updateActivity = (id: string, body: { label?: string; color?: string; active?: boolean }) =>
+    this.send<{ id: string; label: string; color: string; active: boolean }>('PATCH', `/api/admin/activities/${id}`, body);
   missions = () => this.get<Mission[]>('/api/admin/missions');
-  createMission = (body: Record<string, unknown>) => this.send<{ id: string }>('POST', '/api/admin/missions', body);
-  updateMission = (id: string, body: Record<string, unknown>) => this.send<Mission>('PATCH', `/api/admin/missions/${id}`, body);
+  createMission = (body: MissionInput & { consultantId: string; clientId: string; color?: string; activities?: string[] }) =>
+    this.send<{ id: string }>('POST', '/api/admin/missions', body);
+  updateMission = (id: string, body: Partial<MissionInput> & { active?: boolean; color?: string; addActivities?: string[] }) =>
+    this.send<Mission>('PATCH', `/api/admin/missions/${id}`, body);
   settings = () => this.get<AppSettings>('/api/admin/settings');
   saveSettings = (s: AppSettings) => this.send<AppSettings>('PUT', '/api/admin/settings', s);
 }
