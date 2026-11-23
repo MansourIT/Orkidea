@@ -11,6 +11,10 @@ export interface Bindings {
   MAIL_DEV_LOG?: string;
   /** Clé API Brevo (secret : wrangler secret put BREVO_API_KEY). */
   BREVO_API_KEY?: string;
+  /** "true" pour exposer /api/docs (Swagger) et /api/openapi.json — dev uniquement. */
+  API_DOCS?: string;
+  /** Limiteur de débit Cloudflare sur la demande de lien de connexion (par IP). */
+  LOGIN_LIMITER?: RateLimit;
 }
 
 export interface Variables {
@@ -18,4 +22,3 @@ export interface Variables {
 }
 
 export type AppEnv = { Bindings: Bindings; Variables: Variables };
-

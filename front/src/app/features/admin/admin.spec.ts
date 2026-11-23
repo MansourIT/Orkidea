@@ -1,0 +1,174 @@
+import { Dialog } from '@angular/cdk/dialog';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { provideIcons } from '@ng-icons/core';
+import type { AdminTimesheetBoard, Mission } from '@shared/types';
+import { DEFAULT_SETTINGS } from '@shared/settings';
+import { monthOf, todayInParis } from '@shared/dates';
+import { Confirm } from '../../ui/confirm-dialog';
+import { APP_ICONS } from '../../ui/icons';
+import { AdminPage } from './admin-page';
+import { AdminSettings } from './admin-settings';
+import { AdminTimesheets } from './admin-timesheets';
+import { MissionForm } from './mission-form';
+
+const tick = () => new Promise((r) => setTimeout(r));
+const button = (el: HTMLElement, text: string) => [...el.querySelectorAll('button')].find((b) => b.textContent?.includes(text))!;
+
+describe('Administration', () => {
+  let http: HttpTestingController;
+  let confirm: Confirm;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), provideIcons(APP_ICONS)] });
+    http = TestBed.inject(HttpTestingController);
+    confirm = TestBed.inject(Confirm);
+  });
+
+  afterEach(() => {
+    TestBed.inject(Dialog).closeAll();
+    http.verify();
+  });
+
+  const month = monthOf(todayInParis());
+  const BOARD: AdminTimesheetBoard = {
+    month,
+    workingDays: 20,
+    deadline: '2026-12-03',
+    rows: [
+      { consultantId: 'u-jd', consultant: 'Jean Dupont', id: 't1', status: 'VALIDE', submittedAt: '2026-11-27T10:00:00Z', validatedAt: null, workedDays: 19, absenceDays: 1, late: false },
+      { consultantId: 'u-ml', consultant: 'Marie Lefèvre', id: null, status: 'NON_COMMENCE', submittedAt: null, validatedAt: null, workedDays: 0, absenceDays: 0, late: true },
+    ],
+  };
+
+  it('CRA du mois : statuts, retard, clôture et réouverture avec motif', async () => {
+    const f = TestBed.createComponent(AdminTimesheets);
+    f.detectChanges();
+    http.expectOne((r) => r.url === '/api/admin/timesheets' && r.params.get('month') === month).flush(BOARD);
+    await tick();
+    await f.whenStable();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('En retard');
+    expect(el.textContent).toContain('date limite 03/12/2026');
+
+    vi.spyOn(confirm, 'ask').mockResolvedValue(true);
+    button(el, 'Clôturer').click();
+    await tick();
+    http.expectOne({ method: 'POST', url: '/api/admin/timesheets/t1/close' }).flush({ ok: true });
+    await tick();
+    http.expectOne((r) => r.url === '/api/admin/timesheets').flush({ ...BOARD, rows: [{ ...BOARD.rows[0], status: 'CLOTURE' }, BOARD.rows[1]] });
+    await tick();
+    await f.whenStable();
+
+    vi.spyOn(confirm, 'prompt').mockResolvedValue('Erreur de saisie');
+    button(el, 'Rouvrir').click();
+    await tick();
+    const req = http.expectOne({ method: 'POST', url: '/api/admin/timesheets/t1/reopen' });
+    expect(req.request.body).toEqual({ comment: 'Erreur de saisie' });
+    req.flush({ ok: true });
+    await tick();
+    http.expectOne((r) => r.url === '/api/admin/timesheets').flush(BOARD);
+  });
+
+  it('CRA du mois : historique déplié', async () => {
+    const f = TestBed.createComponent(AdminTimesheets);
+    f.detectChanges();
+    http.expectOne((r) => r.url === '/api/admin/timesheets').flush(BOARD);
+    await tick();
+    await f.whenStable();
+    const el = f.nativeElement as HTMLElement;
+    button(el, 'Historique').click();
+    http.expectOne('/api/admin/timesheets/t1/events').flush([
+      { action: 'SOUMISSION', actorType: 'consultant', actor: 'u-jd', fromStatus: 'BROUILLON', toStatus: 'VALIDE', comment: null, createdAt: '2026-11-27T10:00:00Z' },
+      { action: 'VALIDATION_CLIENT', actorType: 'client', actor: 'marie@client.fr', fromStatus: 'SOUMIS', toStatus: null, comment: 'Projet Alpha : OK', createdAt: '2026-11-28T09:00:00Z' },
+    ]);
+    await tick();
+    await f.whenStable();
+    expect(el.textContent).toContain('Validation client');
+    expect(el.textContent).toContain('par le client marie@client.fr');
+    expect(el.textContent).toContain('Projet Alpha : OK');
+  });
+
+  it('formulaire de mission : valideur obligatoire si validation client, surcharges envoyées', async () => {
+    const f = TestBed.createComponent(MissionForm);
+    f.componentRef.setInput('consultants', [{ id: 'u-jd', name: 'Jean Dupont', email: 'jd@x.fr', role: 'consultant', active: true }]);
+    f.componentRef.setInput('clients', [{ id: 'c1', name: 'Client Alpha', siret: null }]);
+    await f.whenStable();
+    const el = f.nativeElement as HTMLElement;
+    const form = f.componentInstance['form'];
+    form.patchValue({ consultantId: 'u-jd', clientId: 'c1', label: 'Projet Delta', startDate: '2026-12-01', clientValidation: true, weekendPolicy: 'AUTORISE' });
+    await f.whenStable();
+    button(el, 'Créer la mission').click();
+    await f.whenStable();
+    expect(el.textContent).toContain('Nom du valideur obligatoire');
+    expect(el.textContent).toContain('Email du valideur obligatoire');
+    http.expectNone('/api/admin/missions');
+
+    form.patchValue({ validatorName: 'Marie Martin', validatorEmail: 'marie@client.fr' });
+    f.componentInstance.addNew('Audit');
+    f.componentInstance.addNew('Audit');
+    button(el, 'Créer la mission').click();
+    const req = http.expectOne({ method: 'POST', url: '/api/admin/missions' });
+    expect(req.request.body).toMatchObject({
+      consultantId: 'u-jd',
+      clientId: 'c1',
+      label: 'Projet Delta',
+      clientValidation: true,
+      validatorEmail: 'marie@client.fr',
+      weekendPolicy: 'AUTORISE',
+      holidayPolicy: null,
+      workedHolidays: null,
+      activities: ['Audit'],
+    });
+    req.flush({ id: 'm1' });
+  });
+
+  it('formulaire de mission (modification) : dates incohérentes refusées', async () => {
+    const m: Mission = {
+      id: 'm1', consultantId: 'u-jd', consultant: 'Jean Dupont', clientId: 'c1', client: 'Client Alpha', label: 'Projet Alpha', startDate: '2026-01-01', endDate: null,
+      tjm: 550, clientValidation: false, validatorName: null, validatorEmail: null, active: true, weekendPolicy: null, holidayPolicy: null, workedHolidays: ['lundi-pentecote'], holidayRegion: null,
+      activities: [{ id: 'a1', label: 'Développement', color: '#3B82F6', active: true }],
+    };
+    const f = TestBed.createComponent(MissionForm);
+    f.componentRef.setInput('mission', m);
+    await f.whenStable();
+    const el = f.nativeElement as HTMLElement;
+    expect((el.querySelector('#m-label') as HTMLInputElement).value).toBe('Projet Alpha');
+    expect(el.textContent).toContain('Lundi de Pentecôte');
+    f.componentInstance['form'].patchValue({ endDate: '2025-12-01' });
+    button(el, 'Enregistrer').click();
+    await f.whenStable();
+    expect(el.textContent).toContain('La date de fin doit être postérieure');
+    http.expectNone('/api/admin/missions/m1');
+  });
+
+  it('paramètres : chargement et enregistrement', async () => {
+    const f = TestBed.createComponent(AdminSettings);
+    f.detectChanges();
+    http.expectOne('/api/admin/settings').flush(DEFAULT_SETTINGS);
+    await tick();
+    await f.whenStable();
+    const el = f.nativeElement as HTMLElement;
+    const select = el.querySelector<HTMLSelectElement>('#s-comp')!;
+    select.value = 'BLOQUER';
+    select.dispatchEvent(new Event('change'));
+    button(el, 'Enregistrer').click();
+    const req = http.expectOne({ method: 'PUT', url: '/api/admin/settings' });
+    expect(req.request.body.submission.completeness).toBe('BLOQUER');
+    expect(req.request.body.calendar).toEqual(DEFAULT_SETTINGS.calendar);
+    req.flush(req.request.body);
+    await tick();
+    await f.whenStable();
+    expect(el.textContent).toContain('Paramétrage enregistré');
+  });
+
+  it('onglets : ?onglet=parametres affiche les paramètres', async () => {
+    const f = TestBed.createComponent(AdminPage);
+    f.componentRef.setInput('onglet', 'parametres');
+    await f.whenStable();
+    expect((f.nativeElement as HTMLElement).querySelector('[aria-selected="true"]')?.textContent).toContain('Paramètres');
+    http.expectOne('/api/admin/settings').flush(DEFAULT_SETTINGS);
+  });
+});

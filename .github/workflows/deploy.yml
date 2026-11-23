@@ -1,0 +1,75 @@
+# Mise en production : déclenchement MANUEL depuis la branche main uniquement
+# (Actions → « Déploiement » → Run workflow).
+# Secrets requis dans l'environnement GitHub « production » : CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
+name: Déploiement
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploiement-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  WRANGLER_SEND_METRICS: 'false'
+
+jobs:
+  production:
+    name: Migrations D1 puis wrangler deploy
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://app.orkidea.fr
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm 11
+        run: npm install -g npm@11
+
+      - name: Installation
+        run: npm ci
+
+      - name: Base D1 configurée ?
+        run: |
+          if grep -q '"database_id": "00000000-0000-0000-0000-000000000000"' api/wrangler.jsonc; then
+            echo "::error::Renseignez database_id dans api/wrangler.jsonc (npx wrangler d1 create orkidea-cra --jurisdiction eu). Voir README, « Mise en production »."
+            exit 1
+          fi
+
+      - name: Vérifications avant déploiement
+        run: |
+          npm run typecheck
+          npm run build
+          npm test -w api
+          npm test -w front
+
+      - name: Migrations D1 (production)
+        run: npm run db:migrate:remote -w api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Déploiement du Worker (front + API)
+        run: npx wrangler deploy
+        working-directory: api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Contrôle de santé
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS https://app.orkidea.fr/api/health; then exit 0; fi
+            sleep 10
+          done
+          echo "::warning::https://app.orkidea.fr/api/health ne répond pas encore (DNS du domaine personnalisé en cours ?)"

@@ -1,0 +1,63 @@
+# Équivalent GitLab CI de .github/workflows (pour la future migration vers GitLab).
+# Variables protégées à définir dans GitLab : CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
+# Non exécuté à ce jour (le dépôt est sur GitHub) : à valider lors de la migration.
+
+image: node:22
+
+variables:
+  WRANGLER_SEND_METRICS: 'false'
+  npm_config_cache: '$CI_PROJECT_DIR/.npm'
+
+stages: [install, check, test, build, deploy]
+
+default:
+  cache:
+    key:
+      files: [package-lock.json]
+    paths: [.npm/, node_modules/, api/node_modules/, front/node_modules/, e2e/node_modules/]
+  before_script:
+    - npm install -g npm@11
+
+installation:
+  stage: install
+  script: [npm ci]
+
+verification:
+  stage: check
+  script: [npm run typecheck]
+
+tests:
+  stage: test
+  script:
+    - npm run build
+    - npm test -w api
+    - npm test -w front
+
+e2e:
+  stage: test
+  image: mcr.microsoft.com/playwright:v1.63.0-noble
+  script:
+    - npm run e2e
+  artifacts:
+    when: on_failure
+    paths: [e2e/playwright-report/, e2e/test-results/, e2e/.state/wrangler.log]
+    expire_in: 7 days
+
+build:
+  stage: build
+  script: [npm run build]
+  artifacts:
+    paths: [front/dist/]
+    expire_in: 1 day
+
+deploiement:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+  environment:
+    name: production
+    url: https://app.orkidea.fr
+  script:
+    - npm run db:migrate:remote -w api
+    - cd api && npx wrangler deploy

@@ -1,4 +1,6 @@
 // Types partagés entre le front Angular et l'API Worker.
+import type { AppSettings, DayRules, MissionCalendarOverrides } from './settings';
+import type { HolidayCode, HolidayRegion } from './holidays';
 
 export type Role = 'consultant' | 'admin';
 
@@ -22,6 +24,13 @@ export interface Activity {
   label: string;
   kind: ActivityKind;
   color: string;
+  /** Dates de la mission (null pour les absences ou mission sans fin). */
+  startDate: string | null;
+  endDate: string | null;
+  /** Règles de saisie effectives (week-ends, fériés) pour cette activité. */
+  rules: DayRules;
+  /** Activité désactivée mais encore présente dans des saisies du mois demandé. */
+  archived?: boolean;
 }
 
 export interface Entry {
@@ -47,6 +56,10 @@ export interface Timesheet {
   workingDays: number;
   validations: ValidationSummary[];
   submittedAt: string | null;
+  /** Première date de soumission possible (null = dès le 1er du mois). */
+  submissionOpensOn: string | null;
+  /** Raison pour laquelle la soumission est impossible aujourd'hui (null = possible). */
+  submissionBlockedReason: string | null;
 }
 
 export interface SaveTimesheetBody {
@@ -64,3 +77,105 @@ export const STATUS_LABELS: Record<TimesheetStatus, string> = {
   CLOTURE: 'Clôturé',
 };
 
+
+/** Statut affiché côté admin / tableau de bord : un CRA jamais ouvert n'existe pas en base. */
+export type TimesheetListStatus = TimesheetStatus | 'NON_COMMENCE';
+
+/** Ligne du tableau de bord consultant (GET /api/timesheets?from=&to=). */
+export interface TimesheetSummary {
+  month: string;
+  status: TimesheetListStatus;
+  workedDays: number;
+  absenceDays: number;
+  workingDays: number;
+  submittedAt: string | null;
+}
+
+/** Configuration exposée au front (GET /api/config). */
+export interface ClientConfig {
+  settings: AppSettings;
+  today: string;
+}
+
+/** Ligne du tableau de bord admin (GET /api/admin/timesheets?month=). */
+export interface AdminTimesheetRow {
+  consultantId: string;
+  consultant: string;
+  id: string | null;
+  status: TimesheetListStatus;
+  submittedAt: string | null;
+  validatedAt: string | null;
+  workedDays: number;
+  absenceDays: number;
+  late: boolean;
+}
+
+export interface AdminTimesheetBoard {
+  month: string;
+  workingDays: number;
+  deadline: string;
+  rows: AdminTimesheetRow[];
+}
+
+export interface AdminUser extends User {
+  active: boolean;
+}
+
+export interface Client {
+  id: string;
+  name: string;
+  siret: string | null;
+}
+
+export interface Mission extends MissionCalendarOverrides {
+  id: string;
+  consultantId: string;
+  consultant: string;
+  clientId: string;
+  client: string;
+  label: string;
+  startDate: string;
+  endDate: string | null;
+  tjm: number | null;
+  clientValidation: boolean;
+  validatorName: string | null;
+  validatorEmail: string | null;
+  active: boolean;
+  activities: Array<{ id: string; label: string; color: string; active: boolean }>;
+}
+
+export type TimesheetEventAction = 'SOUMISSION' | 'VALIDATION_CLIENT' | 'REJET_CLIENT' | 'VALIDATION' | 'CLOTURE' | 'REOUVERTURE' | 'RELANCE';
+
+export interface TimesheetEvent {
+  action: TimesheetEventAction;
+  actorType: 'consultant' | 'admin' | 'client' | 'systeme';
+  actor: string;
+  fromStatus: TimesheetStatus | null;
+  toStatus: TimesheetStatus | null;
+  comment: string | null;
+  createdAt: string;
+}
+
+/** Vue publique du valideur client (GET /api/public/validations/:token). */
+export interface PublicValidationView {
+  consultant: string;
+  month: string;
+  mission: string;
+  client: string;
+  status: 'EN_ATTENTE' | 'VALIDE' | 'REJETE';
+  expired: boolean;
+  comment: string | null;
+  totalDays: number;
+  entries: Array<{ date: string; activity: string; quantity: number }>;
+}
+
+/** Codes d'erreur stables renvoyés par l'API, en plus du message. */
+export type ApiErrorCode = 'LIEN_INVALIDE' | 'LIEN_REMPLACE' | 'LIEN_EXPIRE' | 'DEJA_TRAITE' | 'JOURS_MANQUANTS';
+
+export interface ApiError {
+  error: string;
+  details?: string[];
+  code?: ApiErrorCode;
+}
+
+export type { HolidayCode, HolidayRegion };

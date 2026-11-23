@@ -14,6 +14,7 @@ export default defineConfig({
           TEST_SEED: readFileSync(path.join(import.meta.dirname, 'seed/dev.sql'), 'utf8'),
           APP_URL: 'http://localhost',
           MAIL_DEV_LOG: 'true',
+          API_DOCS: 'true',
         },
       },
     })),
