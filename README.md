@@ -1,64 +1,74 @@
 # Orkidea CRA
 
-Outil de comptes rendus d'activité (CRA) d'Orkidea, servi sur **app.orkidea.fr**.
-Un seul Cloudflare Worker sert le front Angular (assets statiques) et l'API Hono sous `/api/*`, avec une base D1 (juridiction UE).
+Outil de comptes rendus d'activité (CRA) d'Orkidea, servi sur **https://app.orkidea.fr**.
+
+- **Consultants** : saisie du mois au pinceau (jours / demi-journées), vue calendrier et vue tableau, soumission, PDF, tableau de bord.
+- **Valideurs clients** : lien sécurisé par email (sans compte), validation ou rejet motivé, uniquement pour leur mission.
+- **Orkidea (admin)** : suivi du mois, clôture / réouverture / relance, historique, consultants, clients, missions, paramétrage.
+
+Un seul **Cloudflare Worker** sert le front Angular (assets statiques) et l'API Hono sous `/api/*` (même origine, cookies simples, pas de CORS), avec une base **D1 en juridiction UE**. Emails transactionnels via **Brevo**.
+
+## Sommaire
+
+1. [Structure](#structure)
+2. [Développement local](#développement-local)
+3. [Vérifications et tests](#vérifications-et-tests)
+4. [Intégration continue](#intégration-continue)
+5. [Mise en production](#mise-en-production)
+6. [Exploitation](#exploitation)
+7. [Référence technique](#référence-technique)
 
 ## Structure
 
 ```
-api/      Worker Hono (API), migrations D1, seed de démo
+api/      Worker Hono (API), migrations D1, seed de démo, tests Workers (Vitest)
 front/    Front Angular 22 (standalone, signals, zoneless, Tailwind 4, CDK) — build vers front/dist/front/browser
 e2e/      Tests de bout en bout Playwright
-shared/   Types et calcul des jours fériés, partagés API / front
+shared/   Types, jours fériés, règles de calendrier et de soumission (partagés API / front)
 scripts/  Outils (page provisoire tant que le front n'est pas construit)
+.github/  Workflows CI et déploiement (GitHub Actions)
+.gitlab-ci.yml  Équivalent GitLab CI, pour la future migration (non exécuté à ce jour)
 ```
 
-## Prérequis
+## Développement local
 
-- Node.js 22 (`.nvmrc`)
-- **npm 11** : npm 10.9 plante sur l'installation de ce workspace (`Cannot read properties of null (reading 'edgesOut')`).
-  Utiliser `npx npm@11 install` ou mettre npm à jour (`npm i -g npm@11`).
-
-## Démarrage local (API)
+Prérequis : **Node.js 22** (`.nvmrc`) et **npm 11** — npm 10.9 plante sur l'installation de ce workspace
+(`Cannot read properties of null (reading 'edgesOut')`) : `npm i -g npm@11` ou `npx npm@11 install`.
 
 ```bash
-npx npm@11 install
+npm install
 cp api/.dev.vars.example api/.dev.vars
 npm run db:migrate:local -w api
 npm run db:seed:local -w api
-npm run dev:api            # http://localhost:8787
-curl http://localhost:8787/api/health
 ```
 
-En local (`MAIL_DEV_LOG=true`), les emails ne sont pas envoyés : ils sont affichés dans la console de `wrangler dev`, avec les liens de connexion et de validation.
-
-Comptes de démo : `contact@orkidea.fr` (admin), `jean.dupont@example.com` (consultant).
-
-### Développement complet (API + front)
-
-Dans deux terminaux :
+Puis, dans deux terminaux :
 
 ```bash
 npm run dev:api      # wrangler dev, http://localhost:8787
 npm run dev:front    # ng serve, http://localhost:4200 (proxy /api → 8787, voir front/proxy.conf.json)
 ```
 
-Ouvrir http://localhost:4200, saisir `jean.dupont@example.com`, puis copier le lien `[MAIL] Lien: http://localhost:4200/connexion?token=…` affiché dans la console de `wrangler dev`.
+Ouvrir http://localhost:4200, saisir `jean.dupont@example.com` (consultant) ou `contact@orkidea.fr` (admin), puis copier le lien `[MAIL] Lien: http://localhost:4200/connexion?token=…` affiché dans la console de `wrangler dev` : en local (`MAIL_DEV_LOG=true`), les emails ne sont pas envoyés mais affichés.
 
-Pour tester le build de production servi par le Worker (même origine, en-têtes de sécurité de `front/public/_headers`) : `npm run build`, puis `npm run dev:api` avec `APP_URL=http://localhost:8787` et ouvrir http://localhost:8787.
+- `APP_URL=http://localhost:4200` dans `api/.dev.vars` : les liens des emails et le contrôle d'origine s'appuient dessus. Pour l'API seule (curl) ou le build de production servi par le Worker (`npm run build` puis http://localhost:8787), mettez `APP_URL=http://localhost:8787`.
+- Documentation interactive de l'API (Swagger) : http://localhost:8787/api/docs (uniquement si `API_DOCS=true`, jamais en production).
+- Données de démo : missions Alpha (validation client exigée, valideur Marie Martin), Beta et Gamma (sans validation).
 
-Le mode de développement complet (front Angular sur le port 4200 avec proxy `/api`) suppose `APP_URL=http://localhost:4200` dans `api/.dev.vars` (valeur de `.dev.vars.example`) : les liens des emails et le contrôle d'origine s'appuient dessus. Pour tester l'API seule avec curl, mettez `APP_URL=http://localhost:8787`.
-
-Documentation interactive de l'API (Swagger) : http://localhost:8787/api/docs (uniquement si `API_DOCS=true`).
-
-## Vérifications
+## Vérifications et tests
 
 ```bash
-npm run typecheck
-npm test            # API (D1 local, migrations + seed avant chaque test) puis front (Vitest)
+npm run typecheck   # API, front, e2e
+npm test            # API (Workers + D1 local, migrations + seed avant chaque test) puis front (Vitest)
 npm run build       # build de production du front
 npm run e2e         # build du front puis tests de bout en bout (Playwright)
 ```
+
+| Suite | Volume | Contenu |
+|---|---|---|
+| API (`api/test`, `shared/*.test.ts`) | 89 tests | scénario complet du cycle de vie, corrections de sécurité, paramétrage, jours fériés, règles partagées |
+| Front (`front/src/**/*.spec.ts`) | 62 tests | pinceau, store de saisie, grille, vue tableau, connexion, validation client, admin, tableau de bord |
+| E2E (`e2e/tests`) | 15 tests | voir ci-dessous |
 
 ### Tests de bout en bout (`e2e/`)
 
@@ -73,7 +83,96 @@ Playwright pilote l'application « comme en production » : un seul `wrangler de
 
 Navigateur : Chromium (`npx playwright install chromium` si besoin, version alignée sur `@playwright/test` 1.63.0).
 
-## Organisation du front
+## Intégration continue
+
+**GitHub Actions** (`.github/workflows/`) :
+
+| Workflow | Déclenchement | Étapes |
+|---|---|---|
+| `ci.yml` — CI | chaque push et pull request | `npm ci` → types (API, front, e2e) → build du front → tests API → tests front ; puis job e2e : Chromium → build → Playwright (rapport et journal en artefact si échec) |
+| `deploy.yml` — Déploiement | **manuel** (Actions → Déploiement → Run workflow), **branche `main` uniquement**, environnement protégé `production` | contrôle de `database_id` → mêmes vérifications que la CI → migrations D1 distantes → `wrangler deploy` → contrôle `/api/health` |
+
+`.gitlab-ci.yml` reprend les mêmes étapes (install → check → test → build → deploy manuel sur `main`) pour le jour où le dépôt passera sur GitLab : il n'a pas encore été exécuté.
+
+## Mise en production
+
+À faire **une seule fois**, dans cet ordre. Rien n'est créé automatiquement : chaque étape est à votre initiative.
+
+### 1. Cloudflare
+
+- La zone `orkidea.fr` doit être sur le **même compte** que le Worker (c'est le cas du site vitrine).
+- **Plan Workers Paid recommandé** (5 $/mois) : la génération du PDF peut dépasser les 10 ms de CPU du plan gratuit.
+- Aucun enregistrement DNS `app.orkidea.fr` ne doit exister : `wrangler deploy` crée le domaine personnalisé (`routes` dans `api/wrangler.jsonc`). Le site vitrine n'est pas touché.
+
+### 2. Base D1 en juridiction UE
+
+```bash
+cd api
+npx wrangler login
+npx wrangler d1 create orkidea-cra --jurisdiction eu
+```
+
+Copier le `database_id` renvoyé dans `api/wrangler.jsonc` (à la place des zéros), committer sur `main`. La juridiction est **définitive** : la base ne pourra pas quitter l'UE.
+
+### 3. Brevo (emails)
+
+1. Compte Brevo (hébergé dans l'UE), puis **authentifier le domaine `orkidea.fr`** (Expéditeurs, domaines → SPF, DKIM, DMARC dans le DNS Cloudflare). Sans cela, les liens de connexion et de validation finiront en indésirables chez les clients.
+2. Créer l'expéditeur `cra@orkidea.fr` (correspond à `MAIL_FROM` dans `wrangler.jsonc`).
+3. Créer une clé API transactionnelle, puis :
+
+```bash
+cd api
+npx wrangler secret put BREVO_API_KEY
+```
+
+Sans cette clé, l'API refuse d'envoyer les emails (aucun lien n'est jamais écrit dans les logs de production).
+
+### 4. GitHub
+
+1. Cloudflare → *My Profile → API Tokens* → modèle **« Edit Cloudflare Workers »**, en ajoutant la permission **D1 : Edit** ; limiter au compte Orkidea et à la zone `orkidea.fr`.
+2. GitHub → *Settings → Environments* → créer **`production`** : *Deployment branches* = `main`, *Required reviewers* = vous.
+3. Dans cet environnement, ajouter les secrets **`CLOUDFLARE_API_TOKEN`** et **`CLOUDFLARE_ACCOUNT_ID`** (identifiant visible sur le tableau de bord Cloudflare).
+
+### 5. Premier déploiement
+
+1. Fusionner la branche de développement dans `main`.
+2. Actions → **Déploiement** → *Run workflow* (branche `main`) → approuver.
+3. Vérifier https://app.orkidea.fr/api/health (le certificat du domaine peut prendre quelques minutes).
+
+### 6. Comptes
+
+Créer le premier compte admin (les autres comptes se créent ensuite dans l'application, onglet *Consultants*) :
+
+```bash
+cd api
+npx wrangler d1 execute orkidea-cra --remote --command \
+  "INSERT INTO users (id, email, name, role) VALUES (lower(hex(randomblob(16))), 'contact@orkidea.fr', 'Votre nom', 'admin')"
+```
+
+Puis, dans l'application : *Administration* → *Paramètres* (vérifier les règles), *Clients*, *Consultants*, *Missions* (TJM, validation client exigée par le contrat, activités).
+
+### 7. Site vitrine
+
+Dans le dépôt du site Astro (**hors de ce dépôt**), ajouter un lien « Espace consultant » vers `https://app.orkidea.fr`.
+
+## Exploitation
+
+| Sujet | Où / comment |
+|---|---|
+| Journaux | Cloudflare → Workers → `orkidea-cra` → *Logs* (`observability` activé). Aucun jeton ni lien n'y est écrit. |
+| Retour arrière du code | `cd api && npx wrangler rollback` (version précédente du Worker). |
+| Sauvegarde / restauration des données | D1 **Time Travel** (30 jours) : `npx wrangler d1 time-travel restore orkidea-cra --timestamp=…`. Export ponctuel : `npx wrangler d1 export orkidea-cra --remote --output=sauvegarde.sql`. |
+| Nouvelle migration | ajouter `api/migrations/000N_….sql` ; elle est appliquée par le workflow de déploiement avant `wrangler deploy`. |
+| Purge | tâche planifiée quotidienne (3 h 17 UTC) : sessions et liens de connexion expirés. |
+| Limitation de débit | 10 demandes de lien / minute / IP (binding `LOGIN_LIMITER`), au plus 3 liens valides en attente par compte. |
+| Relance d'un valideur | *Administration → CRA du mois → Relancer* (nouveau lien, l'ancien est invalidé). |
+| RGPD | données au repos dans l'UE (D1 `eu`, Brevo) ; tenir à jour le registre des traitements (consultants, valideurs clients) et les DPA Cloudflare / Brevo ; durée de conservation des CRA à fixer avec l'expert-comptable (pièces de paie / facturation). |
+
+## Référence technique
+
+Modèle de données : `api/migrations/` ; contrat d'API : Swagger en local (`/api/docs`) ; types échangés : `shared/types.ts`.
+
+### Organisation du front
 
 ```
 front/src/
@@ -89,7 +188,7 @@ front/src/
 - Code partagé importé via l'alias `@shared/*` (`../shared`).
 - Sécurité : `front/public/_headers` (CSP stricte sans script inline, `frame-ancestors 'none'`, `Referrer-Policy: no-referrer` pour ne pas divulguer les jetons des liens). L'inlining du CSS critique est désactivé car il repose sur un script inline.
 
-## Organisation de l'API
+### Organisation de l’API
 
 ```
 api/src/
@@ -107,7 +206,7 @@ shared/               types, jours fériés, règles de calendrier et de soumiss
 
 Chaque module suit le même découpage : `*.routes.ts` (contrat HTTP validé par Zod et documenté en OpenAPI), `*.service.ts` (règles métier, sans HTTP), `*.repository.ts` (requêtes D1).
 
-## Connexion
+### Connexion
 
 1. `POST /api/auth/login {email}` : réponse identique que le compte existe ou non. Au plus 3 liens valides en attente par compte, 10 demandes / minute / IP.
 2. L'email contient `https://app.orkidea.fr/connexion?token=…` (page du front).
@@ -115,7 +214,7 @@ Chaque module suit le même découpage : `*.routes.ts` (contrat HTTP validé par
 
 Les antivirus de messagerie qui ouvrent les liens à l'avance (GET) ne consomment donc pas le jeton.
 
-## Paramétrage (admin → `PUT /api/admin/settings`)
+### Paramétrage (admin → `PUT /api/admin/settings`)
 
 | Réglage | Valeurs | Défaut |
 |---|---|---|
