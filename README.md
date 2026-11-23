@@ -8,6 +8,7 @@ Un seul Cloudflare Worker sert le front Angular (assets statiques) et l'API Hono
 ```
 api/      Worker Hono (API), migrations D1, seed de démo
 front/    Front Angular 22 (standalone, signals, zoneless, Tailwind 4, CDK) — build vers front/dist/front/browser
+e2e/      Tests de bout en bout Playwright
 shared/   Types et calcul des jours fériés, partagés API / front
 scripts/  Outils (page provisoire tant que le front n'est pas construit)
 ```
@@ -56,7 +57,21 @@ Documentation interactive de l'API (Swagger) : http://localhost:8787/api/docs (u
 npm run typecheck
 npm test            # API (D1 local, migrations + seed avant chaque test) puis front (Vitest)
 npm run build       # build de production du front
+npm run e2e         # build du front puis tests de bout en bout (Playwright)
 ```
+
+### Tests de bout en bout (`e2e/`)
+
+Playwright pilote l'application « comme en production » : un seul `wrangler dev` (port 8788) sert le front construit et l'API, avec une base D1 locale **recréée à chaque lancement** (`e2e/.state/`, migrations + seed). Les emails sont lus dans le journal de `wrangler dev` (`MAIL_DEV_LOG=true`) : aucune route de test n'existe côté production. Les sessions consultant et admin sont ouvertes une fois (lien magique) puis réutilisées.
+
+| Fichier | Scénario |
+|---|---|
+| `auth.spec.ts` | redirection anonyme, email invalide, lien à usage unique, accès admin refusé, déconnexion |
+| `parcours.spec.ts` | saisie au pinceau (glisser), demi-journées, enregistrement → soumission (jours manquants) → le valideur ne voit que sa mission, rejet motivé → correction, nouvelle soumission → ancien lien « remplacé », validation → lecture seule + PDF → historique et clôture admin |
+| `saisie.spec.ts` | week-end refusé, vue tableau (clavier, dépassement > 1 j), garde « modifications non enregistrées », tableau de bord |
+| `mobile.spec.ts` | Pixel 7 : pas de débordement horizontal, glisser au doigt (événements tactiles réels) |
+
+Navigateur : Chromium (`npx playwright install chromium` si besoin, version alignée sur `@playwright/test` 1.63.0).
 
 ## Organisation du front
 

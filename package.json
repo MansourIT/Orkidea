@@ -4,7 +4,8 @@
   "type": "module",
   "workspaces": [
     "api",
-    "front"
+    "front",
+    "e2e"
   ],
   "engines": {
     "node": ">=22"
@@ -12,15 +13,17 @@
   "scripts": {
     "ensure-assets": "node scripts/ensure-assets.mjs",
     "dev:api": "npm run ensure-assets && npm run dev -w api",
-    "typecheck": "npm run typecheck -w api && npm run typecheck -w front",
+    "typecheck": "npm run typecheck -w api && npm run typecheck -w front && npm run typecheck -w e2e",
     "test": "npm run ensure-assets && npm run test -w api && npm run test -w front",
     "dev:front": "npm start -w front",
-    "build": "npm run build -w front"
+    "build": "npm run build -w front",
+    "e2e": "npm run build && npm test -w e2e"
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
     "workerd@1.20261119.1": true,
     "lmdb": false,
-    "msgpackr-extract": false
+    "msgpackr-extract": false,
+    "@parcel/watcher": false
   }
 }
