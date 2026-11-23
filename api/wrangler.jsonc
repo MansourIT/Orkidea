@@ -1,34 +1,63 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "orkidea-cra",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-11-01",
-  "compatibility_flags": ["nodejs_compat"],
-  // Un seul Worker sert le front Angular (assets statiques) ET l'API /api/*.
-  "assets": {
-    "directory": "../front/dist/front/browser",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
-  },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "orkidea-cra",
-      // Remplacer par l'id renvoyé par : npx wrangler d1 create orkidea-cra --jurisdiction eu
-      "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "migrations"
-    }
-  ],
-  "vars": {
-    "APP_URL": "https://app.orkidea.fr",
-    "MAIL_FROM": "Orkidea CRA <cra@orkidea.fr>"
-  },
-  // Limiteur de débit sur la demande de lien de connexion (10 requêtes / minute / IP).
-  "ratelimits": [{ "name": "LOGIN_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
-  // Tâche quotidienne (UTC) : purge des sessions et liens expirés.
-  "triggers": { "crons": ["17 3 * * *"] },
-  "routes": [{ "pattern": "app.orkidea.fr", "custom_domain": true }],
-  "observability": { "enabled": true }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "orkidea-cra",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-11-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	// Un seul Worker sert le front Angular (assets statiques) ET l'API /api/*.
+	"assets": {
+		"directory": "../front/dist/front/browser",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": [
+			"/api/*"
+		]
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "orkidea-cra",
+			// Remplacer par l'id renvoyé par : npx wrangler d1 create orkidea-cra --jurisdiction eu
+			"database_id": "00000000-0000-0000-0000-000000000000",
+			"migrations_dir": "migrations"
+		},
+		{
+			"binding": "orkidea_cra",
+			"database_name": "orkidea-cra",
+			"database_id": "cbe01241-c55b-4bc4-ad2b-3cc8bf7995a0",
+			"remote": true
+		}
+	],
+	"vars": {
+		"APP_URL": "https://app.orkidea.fr",
+		"MAIL_FROM": "Orkidea CRA <cra@orkidea.fr>"
+	},
+	// Limiteur de débit sur la demande de lien de connexion (10 requêtes / minute / IP).
+	"ratelimits": [
+		{
+			"name": "LOGIN_LIMITER",
+			"namespace_id": "1001",
+			"simple": {
+				"limit": 10,
+				"period": 60
+			}
+		}
+	],
+	// Tâche quotidienne (UTC) : purge des sessions et liens expirés.
+	"triggers": {
+		"crons": [
+			"17 3 * * *"
+		]
+	},
+	"routes": [
+		{
+			"pattern": "app.orkidea.fr",
+			"custom_domain": true
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
 }
-
