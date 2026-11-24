@@ -75,7 +75,7 @@ describe('Administration', () => {
     f.componentInstance['form'].patchValue({ endDate: '2025-12-01' });
     button(el, 'Enregistrer').click();
     await f.whenStable();
-    expect(el.textContent).toContain('La date de fin doit être postérieure');
+    expect(el.textContent).toContain('La fin doit être postérieure au début.');
     http.expectNone('/api/admin/missions/m1');
   });
 

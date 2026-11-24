@@ -49,7 +49,7 @@
 }
 
 @utility input {
-    @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-ink placeholder:text-slate-400 focus:border-orchid focus:ring-2 focus:ring-orchid-200 focus:outline-none;
+    @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-ink placeholder:text-slate-400 focus:border-orchid focus:ring-2 focus:ring-orchid-200 focus:outline-none aria-[invalid=true]:border-red-500 aria-[invalid=true]:ring-1 aria-[invalid=true]:ring-red-200;
 }
 
 @utility label {
@@ -80,4 +80,12 @@
 
 @utility menu-item {
   @apply flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink hover:bg-slate-100 focus:bg-slate-100 focus:outline-none;
+}
+
+@utility section-title {
+  @apply mb-3 flex items-center gap-2 text-sm font-semibold text-ink;
+}
+
+@utility section-num {
+  @apply flex h-5 w-5 items-center justify-center rounded-full bg-orchid-50 text-[11px] font-bold text-orchid-700;
 }
