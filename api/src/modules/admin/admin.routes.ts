@@ -35,6 +35,41 @@ adminRoutes.openapi(
 );
 
 adminRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/timesheets/export',
+    tags: ['Admin'],
+    summary: 'Export CSV du mois (paie / facturation)',
+    request: { query: z.object({ month: MonthSchema }) },
+    responses: { 200: { description: 'CSV (séparateur ;)', content: { 'text/csv': { schema: z.string() } } } },
+  }),
+  async (c) => {
+    const { month } = c.req.valid('query');
+    const csv = await svc.exportMonthCsv(await serviceCtx(c), month);
+    return new Response(csv, {
+      headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="CRA-${month}.csv"` },
+    });
+  },
+);
+
+adminRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/timesheets/close-validated',
+    tags: ['Admin'],
+    summary: 'Clôture de tous les CRA validés du mois',
+    request: { query: z.object({ month: MonthSchema }) },
+    responses: { 200: ok('Nombre de CRA clôturés') },
+  }),
+  async (c) => c.json({ closed: await svc.closeValidated(await serviceCtx(c), c.get('user'), c.req.valid('query').month) }, 200),
+);
+
+adminRoutes.openapi(
+  createRoute({ method: 'get', path: '/timesheets/{id}/detail', tags: ['Admin'], summary: 'Détail d’un CRA (saisies, validations, activités)', request: { params: IdParam }, responses: { 200: ok('Détail'), 404: ok('Introuvable') } }),
+  async (c) => c.json(await svc.detail(await serviceCtx(c), c.req.valid('param').id), 200),
+);
+
+adminRoutes.openapi(
   createRoute({ method: 'post', path: '/timesheets/{id}/close', tags: ['Admin'], summary: 'Clôture d’un CRA validé', request: { params: IdParam }, responses: { 200: ok('Clôturé'), 404: ok('Introuvable'), 409: ok('Non validé') } }),
   async (c) => {
     await svc.close(await serviceCtx(c), c.get('user'), c.req.valid('param').id);

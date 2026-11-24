@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import type {
   Activity,
   AdminTimesheetBoard,
+  AdminTimesheetDetail,
   AdminUser,
   ApiError,
   Client,
@@ -70,6 +71,9 @@ export class Api {
   reopenTimesheet = (id: string, comment?: string) => this.send<{ ok: true }>('POST', `/api/admin/timesheets/${id}/reopen`, { comment });
   resendValidation = (id: string) => this.send<{ ok: true; sent: number }>('POST', `/api/admin/timesheets/${id}/resend`);
   timesheetEvents = (id: string) => this.get<TimesheetEvent[]>(`/api/admin/timesheets/${id}/events`);
+  timesheetDetail = (id: string) => this.get<AdminTimesheetDetail>(`/api/admin/timesheets/${id}/detail`);
+  closeValidated = (month: string) => firstValueFrom(this.http.post<{ closed: number }>('/api/admin/timesheets/close-validated', {}, { params: { month } }));
+  exportUrl = (month: string) => `/api/admin/timesheets/export?month=${month}`;
   adminPdfUrl = (id: string) => `/api/admin/timesheets/${id}/pdf`;
   users = () => this.get<AdminUser[]>('/api/admin/users');
   createUser = (body: { email: string; name: string; role: 'consultant' | 'admin' }) => this.send<{ id: string }>('POST', '/api/admin/users', body);
