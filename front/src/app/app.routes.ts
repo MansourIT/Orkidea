@@ -38,7 +38,7 @@ export const routes: Routes = [
         loadComponent: () => import('./features/timesheet/timesheet-page').then((m) => m.TimesheetPage),
       },
       { path: 'tableau-de-bord', title: T('Tableau de bord'), loadComponent: () => import('./features/dashboard/dashboard-page').then((m) => m.DashboardPage) },
-      { path: 'admin', title: T('Administration'), canActivate: [adminGuard], loadComponent: () => import('./features/admin/admin-page').then((m) => m.AdminPage) },
+      { path: 'admin', title: T('Administration'), canActivate: [adminGuard], canDeactivate: [unsavedChangesGuard], loadComponent: () => import('./features/admin/admin-page').then((m) => m.AdminPage) },
     ],
   },
   { path: '**', redirectTo: '' },

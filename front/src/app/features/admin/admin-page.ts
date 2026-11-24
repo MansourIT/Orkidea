@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
+import type { HasUnsavedChanges } from '../../core/unsaved-changes.guard';
+import { Confirm } from '../../ui/confirm-dialog';
 import { type Tab, Tabs } from '../../ui/tabs';
 import { AdminClients } from './admin-clients';
 import { AdminMissions } from './admin-missions';
@@ -24,7 +26,7 @@ const TABS: Tab<TabId>[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 class="text-2xl font-bold sm:text-3xl">Administration</h1>
-    <app-tabs class="mt-5 block" label="Administration" [tabs]="tabs" [active]="tab()" (activeChange)="select($event)" />
+    <app-tabs class="mt-5 block" label="Administration" [tabs]="tabs" [active]="tab()" (selected)="select($event)" />
     <div class="mt-5" role="tabpanel" [attr.aria-labelledby]="'onglet-' + tab()">
       @switch (tab()) {
         @case ('cra') { <app-admin-timesheets /> }
@@ -36,13 +38,28 @@ const TABS: Tab<TabId>[] = [
     </div>
   `,
 })
-export class AdminPage {
+export class AdminPage implements HasUnsavedChanges {
   private readonly router = inject(Router);
+  private readonly confirm = inject(Confirm);
+  private readonly settings = viewChild(AdminSettings);
   readonly onglet = input<string>();
   protected readonly tabs = TABS;
   protected readonly tab = computed<TabId>(() => (TABS.some((t) => t.id === this.onglet()) ? (this.onglet() as TabId) : 'cra'));
 
-  select(id: TabId): void {
+  async select(id: TabId): Promise<void> {
+    if (id === this.tab() || !(await this.confirmLeave())) return;
     void this.router.navigate([], { queryParams: { onglet: id === 'cra' ? null : id }, replaceUrl: true });
+  }
+
+  /** Paramètres modifiés mais non enregistrés : confirmation avant de changer d'onglet ou de page. */
+  async confirmLeave(): Promise<boolean> {
+    if (!this.settings()?.hasUnsavedChanges()) return true;
+    return this.confirm.ask({
+      title: 'Paramètres non enregistrés',
+      message: 'Vos modifications des paramètres seront perdues.',
+      confirmLabel: 'Quitter sans enregistrer',
+      cancelLabel: 'Rester',
+      tone: 'danger',
+    });
   }
 }

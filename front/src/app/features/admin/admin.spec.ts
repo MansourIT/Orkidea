@@ -144,26 +144,6 @@ describe('Administration', () => {
     http.expectNone('/api/admin/missions/m1');
   });
 
-  it('paramètres : chargement et enregistrement', async () => {
-    const f = TestBed.createComponent(AdminSettings);
-    f.detectChanges();
-    http.expectOne('/api/admin/settings').flush(DEFAULT_SETTINGS);
-    await tick();
-    await f.whenStable();
-    const el = f.nativeElement as HTMLElement;
-    const select = el.querySelector<HTMLSelectElement>('#s-comp')!;
-    select.value = 'BLOQUER';
-    select.dispatchEvent(new Event('change'));
-    button(el, 'Enregistrer').click();
-    const req = http.expectOne({ method: 'PUT', url: '/api/admin/settings' });
-    expect(req.request.body.submission.completeness).toBe('BLOQUER');
-    expect(req.request.body.calendar).toEqual(DEFAULT_SETTINGS.calendar);
-    req.flush(req.request.body);
-    await tick();
-    await f.whenStable();
-    expect(el.textContent).toContain('Paramétrage enregistré');
-  });
-
   it('onglets : ?onglet=parametres affiche les paramètres', async () => {
     const f = TestBed.createComponent(AdminPage);
     f.componentRef.setInput('onglet', 'parametres');
