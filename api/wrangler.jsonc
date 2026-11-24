@@ -19,15 +19,9 @@
 		{
 			"binding": "DB",
 			"database_name": "orkidea-cra",
-			// Remplacer par l'id renvoyé par : npx wrangler d1 create orkidea-cra --jurisdiction eu
-			"database_id": "00000000-0000-0000-0000-000000000000",
-			"migrations_dir": "migrations"
-		},
-		{
-			"binding": "orkidea_cra",
-			"database_name": "orkidea-cra",
+			// Base de production (créée avec : npx wrangler d1 create orkidea-cra --jurisdiction eu)
 			"database_id": "cbe01241-c55b-4bc4-ad2b-3cc8bf7995a0",
-			"remote": true
+			"migrations_dir": "migrations"
 		}
 	],
 	"vars": {
