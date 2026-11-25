@@ -1,4 +1,5 @@
-import type { AdminTimesheetBoard, AdminTimesheetRow, Mission, TimesheetStatus, User } from '../../../../shared/types';
+import type { AdminTimesheetBoard, AdminTimesheetDetail, AdminTimesheetRow, Mission, TimesheetStatus, User } from '../../../../shared/types';
+import { STATUS_LABELS } from '../../../../shared/types';
 import { workingDays } from '../../../../shared/holidays';
 import { submissionDeadline } from '../../../../shared/submission';
 import { auditStmt } from '../../core/audit';
@@ -6,8 +7,8 @@ import { isoIn, nowIso } from '../../core/clock';
 import { newId, randomToken, sha256 } from '../../core/crypto';
 import { fail } from '../../core/errors';
 import type { Mail } from '../../core/mail';
-import { getTimesheetById, parseWorkedHolidays } from '../timesheets/timesheets.repository';
-import { MISSIONS_TO_VALIDATE_SQL, VALIDATION_TTL, validationRequestMail, type ServiceCtx } from '../timesheets/timesheets.service';
+import { getTimesheetById, listActivities, parseWorkedHolidays } from '../timesheets/timesheets.repository';
+import { MISSIONS_TO_VALIDATE_SQL, VALIDATION_TTL, toTimesheet, validationRequestMail, type ServiceCtx } from '../timesheets/timesheets.service';
 
 const LATE_STATUSES = new Set(['NON_COMMENCE', 'BROUILLON', 'REJETE']);
 
@@ -17,7 +18,7 @@ export async function board(ctx: ServiceCtx, month: string): Promise<AdminTimesh
   const deadline = submissionDeadline(month, ctx.settings.submission, region);
   const { results } = await ctx.db
     .prepare(
-      `SELECT u.id AS consultantId, u.name AS consultant, t.id, COALESCE(t.status, 'NON_COMMENCE') AS status,
+      `SELECT u.id AS consultantId, u.name AS consultant, u.email AS consultantEmail, t.id, COALESCE(t.status, 'NON_COMMENCE') AS status,
               t.submitted_at AS submittedAt, t.validated_at AS validatedAt,
               COALESCE((SELECT SUM(e.quantity) FROM entries e JOIN activities a ON a.id = e.activity_id
                         WHERE e.timesheet_id = t.id AND a.kind = 'travail'), 0) AS workedDays,
@@ -35,6 +36,75 @@ export async function board(ctx: ServiceCtx, month: string): Promise<AdminTimesh
     deadline,
     rows: results.map((r) => ({ ...r, late: ctx.today > deadline && LATE_STATUSES.has(r.status) })),
   };
+}
+
+/** Détail d'un CRA : saisies, validations et activités (y compris archivées) du consultant. */
+export async function detail(ctx: ServiceCtx, id: string): Promise<AdminTimesheetDetail> {
+  const row = await requireTimesheet(ctx.db, id);
+  const consultant = await ctx.db.prepare('SELECT id, name, email FROM users WHERE id = ?').bind(row.consultant_id).first<{ id: string; name: string; email: string }>();
+  const [timesheet, activities] = await Promise.all([toTimesheet(ctx, row), listActivities(ctx.db, row.consultant_id, ctx.settings, { timesheetId: id })]);
+  return { id, consultant: consultant!, timesheet, activities };
+}
+
+/** Clôture de tous les CRA validés du mois (chaque clôture est tracée dans l'historique). */
+export async function closeValidated(ctx: ServiceCtx, admin: User, month: string): Promise<number> {
+  const { results } = await ctx.db.prepare(`SELECT id FROM timesheets WHERE month = ? AND status = 'VALIDE'`).bind(month).all<{ id: string }>();
+  if (!results.length) return 0;
+  const now = nowIso();
+  const stmts: D1PreparedStatement[] = [];
+  for (const { id } of results) {
+    stmts.push(
+      auditStmt(
+        ctx.db,
+        { timesheetId: id, action: 'CLOTURE', actorType: 'admin', actor: admin.id, from: 'VALIDE', to: 'CLOTURE', comment: 'Clôture groupée du mois' },
+        { sql: `EXISTS (SELECT 1 FROM timesheets WHERE id = ? AND status = 'VALIDE')`, params: [id] },
+      ),
+      ctx.db.prepare(`UPDATE timesheets SET status = 'CLOTURE', closed_at = ?1, updated_at = ?1 WHERE id = ?2 AND status = 'VALIDE'`).bind(now, id),
+    );
+  }
+  const res = await ctx.db.batch(stmts);
+  return res.filter((_, i) => i % 2 === 1).reduce((n, r) => n + r.meta.changes, 0);
+}
+
+/** Valeur CSV (séparateur « ; », guillemets doublés). */
+function csvCell(v: string | number | null): string {
+  if (v === null) return '';
+  const s = typeof v === 'number' ? v.toLocaleString('fr-FR', { maximumFractionDigits: 2, useGrouping: false }) : v;
+  return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Export du mois pour la paie et la facturation : une ligne par consultant et par activité
+ * (une ligne vide pour un consultant sans saisie). Format Excel français : « ; », virgule décimale, BOM UTF-8.
+ */
+export async function exportMonthCsv(ctx: ServiceCtx, month: string): Promise<string> {
+  const b = await board(ctx, month);
+  const { results } = await ctx.db
+    .prepare(
+      `SELECT t.consultant_id AS consultantId, a.kind, a.label AS activity, m.label AS mission, cl.name AS client, m.tjm,
+              SUM(e.quantity) AS days
+       FROM timesheets t JOIN entries e ON e.timesheet_id = t.id JOIN activities a ON a.id = e.activity_id
+       LEFT JOIN missions m ON m.id = a.mission_id LEFT JOIN clients cl ON cl.id = m.client_id
+       WHERE t.month = ?
+       GROUP BY t.consultant_id, a.id
+       ORDER BY a.kind DESC, m.label, a.label`,
+    )
+    .bind(month)
+    .all<{ consultantId: string; kind: 'travail' | 'absence'; activity: string; mission: string | null; client: string | null; tjm: number | null; days: number }>();
+  const header = ['Mois', 'Consultant', 'Email', 'Statut', 'Soumis le', 'Type', 'Mission', 'Client', 'Activité', 'Jours', 'TJM (€ HT)', 'Montant indicatif (€ HT)'];
+  const lines = [header.join(';')];
+  for (const r of b.rows) {
+    const status = r.status === 'NON_COMMENCE' ? 'Non commencé' : STATUS_LABELS[r.status];
+    const submitted = r.submittedAt ? r.submittedAt.slice(0, 10).split('-').reverse().join('/') : '';
+    const base = [month, r.consultant, r.consultantEmail, status, submitted];
+    const mine = results.filter((x) => x.consultantId === r.consultantId);
+    if (!mine.length) lines.push([...base, '', '', '', '', 0, null, null].map(csvCell).join(';'));
+    for (const x of mine) {
+      const amount = x.kind === 'travail' && x.tjm !== null ? x.days * x.tjm : null;
+      lines.push([...base, x.kind === 'travail' ? 'Travail' : 'Absence', x.mission ?? '', x.client ?? '', x.activity, x.days, x.kind === 'travail' ? x.tjm : null, amount].map(csvCell).join(';'));
+    }
+  }
+  return '\uFEFF' + lines.join('\r\n') + '\r\n';
 }
 
 async function requireTimesheet(db: D1Database, id: string) {

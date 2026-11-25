@@ -101,6 +101,7 @@ export interface ClientConfig {
 export interface AdminTimesheetRow {
   consultantId: string;
   consultant: string;
+  consultantEmail: string;
   id: string | null;
   status: TimesheetListStatus;
   submittedAt: string | null;
@@ -115,6 +116,14 @@ export interface AdminTimesheetBoard {
   workingDays: number;
   deadline: string;
   rows: AdminTimesheetRow[];
+}
+
+/** Détail d'un CRA pour l'administration (GET /api/admin/timesheets/:id/detail). */
+export interface AdminTimesheetDetail {
+  id: string;
+  consultant: { id: string; name: string; email: string };
+  timesheet: Timesheet;
+  activities: Activity[];
 }
 
 export interface AdminUser extends User {

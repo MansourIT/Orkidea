@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, model } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { NgIcon } from '@ng-icons/core';
 
 export interface Tab<T extends string> {
@@ -7,7 +7,7 @@ export interface Tab<T extends string> {
   icon: string;
 }
 
-/** Onglets accessibles (role tablist, flèches gauche / droite). */
+/** Onglets accessibles (role tablist, flèches gauche / droite), contrôlés par le parent. */
 @Component({
   selector: 'app-tabs',
   imports: [NgIcon],
@@ -21,7 +21,7 @@ export interface Tab<T extends string> {
           [id]="'onglet-' + t.id"
           [attr.aria-selected]="active() === t.id"
           [attr.tabindex]="active() === t.id ? 0 : -1"
-          (click)="active.set(t.id)"
+          (click)="selected.emit(t.id)"
           (keydown)="onKey($event, i)"
           class="-mb-px flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors"
           [class]="active() === t.id ? 'border-orchid text-orchid' : 'border-transparent text-ink-soft hover:text-ink'"
@@ -35,7 +35,9 @@ export interface Tab<T extends string> {
 export class Tabs<T extends string> {
   readonly tabs = input.required<Tab<T>[]>();
   readonly label = input('Onglets');
-  readonly active = model.required<T>();
+  /** Onglet affiché (contrôlé par le parent, qui peut refuser un changement). */
+  readonly active = input.required<T>();
+  readonly selected = output<T>();
 
   onKey(e: KeyboardEvent, i: number): void {
     const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
@@ -43,7 +45,7 @@ export class Tabs<T extends string> {
     e.preventDefault();
     const tabs = this.tabs();
     const next = tabs[(i + step + tabs.length) % tabs.length];
-    this.active.set(next.id);
-    queueMicrotask(() => document.getElementById(`onglet-${next.id}`)?.focus());
+    this.selected.emit(next.id);
+    setTimeout(() => document.getElementById(`onglet-${this.active()}`)?.focus());
   }
 }

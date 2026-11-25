@@ -123,20 +123,26 @@ test.describe.serial('Cycle de vie d’un CRA', () => {
     expect((await pdf.body()).subarray(0, 5).toString()).toBe('%PDF-');
   });
 
-  test('admin : historique puis clôture', async ({ browser }) => {
+  test('admin : compteurs, panneau de détail (historique) puis clôture, export CSV', async ({ browser }) => {
     const admin = await (await browser.newContext({ storageState: adminState })).newPage();
     await admin.goto('/admin');
     await admin.getByLabel('Mois affiché').fill(month);
     const row = admin.locator('tbody tr', { hasText: 'Jean Dupont' }).first();
     await expect(row).toContainText(STATUS_LABELS.VALIDE);
-    await expect(row).toContainText('4,5 j'); // 4 j Alpha + ½ j Beta (le ½ j de congé est compté en absence)
+    await expect(row).toContainText('4,5 j travaillés'); // 4 j Alpha + ½ j Beta (le ½ j de congé est compté en absence)
+    await expect(admin.getByRole('button', { name: /Validés/ })).toContainText('1');
 
-    await row.getByRole('button', { name: 'Historique' }).click();
-    const history = admin.locator('ol');
-    for (const step of ['Soumission', 'Rejet client', 'Validation client', 'CRA validé']) await expect(history).toContainText(step);
+    const csv = await admin.request.get(`/api/admin/timesheets/export?month=${month}`);
+    expect(await csv.text()).toContain('Jean Dupont;jean.dupont@example.com;Validé');
 
-    await row.getByRole('button', { name: 'Clôturer' }).click();
+    await row.click();
+    const drawer = admin.getByRole('dialog', { name: /Détail du CRA de Jean Dupont/ });
+    for (const step of ['Soumission', 'Rejet client', 'Validation client', 'CRA validé']) await expect(drawer).toContainText(step);
+    await expect(drawer).toContainText('n’a pas été travaillé chez nous');
+    await drawer.getByRole('button', { name: 'Clôturer' }).click();
     await admin.getByRole('alertdialog').getByRole('button', { name: 'Clôturer' }).click();
+    await expect(drawer.locator('app-status-badge')).toHaveText(STATUS_LABELS.CLOTURE);
+    await drawer.getByRole('button', { name: 'Fermer le détail' }).click();
     await expect(admin.locator('tbody tr', { hasText: 'Jean Dupont' }).first()).toContainText(STATUS_LABELS.CLOTURE);
 
     await consultant.reload();
