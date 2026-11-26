@@ -7,6 +7,7 @@ import { provideIcons } from '@ng-icons/core';
 import { DEMO_TEMPLATE } from '@shared/contrats';
 import { APP_ICONS } from '../../ui/icons';
 import { NewTemplateDialog } from './new-template-dialog';
+import { SignedUploadDialog } from './signed-upload-dialog';
 import { highlightSource } from './template-source';
 
 describe('Modèles de contrat (front)', () => {
@@ -42,6 +43,40 @@ describe('Modèles de contrat (front)', () => {
     req.flush({ id: 't1' });
     await new Promise((r) => setTimeout(r));
     expect(close).toHaveBeenCalledWith('t1');
+    http.verify();
+  });
+
+  it('dépôt du PDF signé : fichier obligatoire, type contrôlé, date envoyée en paramètre', async () => {
+    const close = vi.fn();
+    const contract = {
+      id: 'k1', number: 'CS-2026-001', status: 'ENVOYE', mission: { id: 'm', label: 'Alpha' }, client: 'Client Alpha', consultant: 'Jean Dupont',
+      template: { id: 't', name: 'Régie', version: 1 }, createdAt: '2026-11-20T10:00:00Z', issuedAt: '2026-11-20T10:00:00Z', sentAt: null, signedOn: null, updatedAt: '2026-11-20T10:00:00Z',
+    };
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), provideIcons(APP_ICONS), { provide: DIALOG_DATA, useValue: { contract } }, { provide: DialogRef, useValue: { close } }],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    const f = TestBed.createComponent(SignedUploadDialog);
+    await f.whenStable();
+    const el = f.nativeElement as HTMLElement;
+    const submit = () => [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Marquer signé'))!.click();
+    submit();
+    await f.whenStable();
+    expect(el.textContent).toContain('Choisissez le PDF signé.');
+    f.componentInstance.pick(new File(['x'], 'photo.png', { type: 'image/png' }));
+    await f.whenStable();
+    expect(el.textContent).toContain('Choisissez un fichier PDF.');
+    f.componentInstance.pick(new File(['%PDF-1.7'], 'signe.pdf', { type: 'application/pdf' }));
+    const date = el.querySelector<HTMLInputElement>('#signe-date')!;
+    date.value = '2026-11-25';
+    date.dispatchEvent(new Event('input'));
+    submit();
+    const req = http.expectOne((r) => r.method === 'PUT' && r.url === '/api/admin/contracts/k1/signed');
+    expect(req.request.params.get('signedOn')).toBe('2026-11-25');
+    expect(req.request.headers.get('content-type')).toBe('application/pdf');
+    req.flush({ ...contract, status: 'SIGNE' });
+    await new Promise((r) => setTimeout(r));
+    expect(close).toHaveBeenCalledWith(expect.objectContaining({ status: 'SIGNE' }));
     http.verify();
   });
 });

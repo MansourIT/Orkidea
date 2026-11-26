@@ -2,6 +2,7 @@ import { Dialog } from '@angular/cdk/dialog';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon } from '@ng-icons/core';
+import { frDate } from '@shared/dates';
 import { VARIABLES, type VariableDef, type VariableGroup, diffStats, lineDiff, parseMarkdown, parseTemplate, renderTemplate } from '@shared/contrats';
 import { CONTRACT_STATUS_LABELS, type ContractDetail, type ContractEventAction, type ContractStatus } from '@shared/types';
 import { Api, apiError } from '../../core/api';
@@ -9,6 +10,7 @@ import type { HasUnsavedChanges } from '../../core/unsaved-changes.guard';
 import { Confirm } from '../../ui/confirm-dialog';
 import { ContractPreview } from './contract-preview';
 import { TemplateSource } from './template-source';
+import { ContractActions } from './contract-actions';
 import { TextDiffDialog, type TextDiffData } from './text-diff-dialog';
 import { VariablePalette } from './variable-palette';
 
@@ -31,7 +33,7 @@ export const STATUS_CLASSES: Record<ContractStatus, string> = {
   ANNULE: 'bg-red-50 text-red-700',
 };
 
-const EVENT_LABELS: Record<ContractEventAction, string> = {
+export const EVENT_LABELS: Record<ContractEventAction, string> = {
   CREATION: 'Brouillon créé',
   MODIFICATION: 'Texte ajusté',
   EMISSION: 'Émis',
@@ -77,7 +79,16 @@ const EVENT_LABELS: Record<ContractEventAction, string> = {
               <button type="button" class="btn-ghost py-1.5 text-sm text-red-700" (click)="cancel()">Annuler le contrat</button>
             }
             @if (c.number) {
-              <a class="btn-primary py-1.5 text-sm" [href]="pdfUrl()" download><ng-icon name="lucideDownload" size="14" aria-hidden="true" /> Télécharger le PDF</a>
+              <a class="btn-secondary py-1.5 text-sm" [href]="pdfUrl()" download><ng-icon name="lucideDownload" size="14" aria-hidden="true" /> PDF émis</a>
+            }
+            @if (c.status === 'EMIS') {
+              <button type="button" class="btn-secondary py-1.5 text-sm" (click)="uploadSigned()">Déposer le PDF signé</button>
+              <button type="button" class="btn-primary py-1.5 text-sm" (click)="markSent()"><ng-icon name="lucideSend" size="14" aria-hidden="true" /> Marquer envoyé</button>
+            } @else if (c.status === 'ENVOYE') {
+              <button type="button" class="btn-primary py-1.5 text-sm" (click)="uploadSigned()"><ng-icon name="lucideCircleCheck" size="14" aria-hidden="true" /> Déposer le PDF signé</button>
+            } @else if (c.status === 'SIGNE') {
+              <button type="button" class="btn-ghost py-1.5 text-sm" (click)="uploadSigned()">Remplacer le PDF signé</button>
+              <a class="btn-primary py-1.5 text-sm" [href]="signedPdfUrl()" download><ng-icon name="lucideDownload" size="14" aria-hidden="true" /> PDF signé</a>
             }
           }
         </div>
@@ -158,11 +169,17 @@ const EVENT_LABELS: Record<ContractEventAction, string> = {
                 @if (c.number) { <div class="flex justify-between gap-3"><dt class="text-ink-soft">Numéro</dt><dd class="font-medium">{{ c.number }}</dd></div> }
                 @if (c.issuedAt) { <div class="flex justify-between gap-3"><dt class="text-ink-soft">Émis le</dt><dd>{{ dateTime(c.issuedAt) }}</dd></div> }
                 <div class="flex justify-between gap-3"><dt class="text-ink-soft">Modèle</dt><dd class="truncate">{{ c.template.name }} v{{ c.template.version }}</dd></div>
+                @if (c.sentAt) { <div class="flex justify-between gap-3"><dt class="text-ink-soft">Envoyé le</dt><dd>{{ dateTime(c.sentAt) }}</dd></div> }
+                @if (c.signedOn) { <div class="flex justify-between gap-3"><dt class="text-ink-soft">Signé le</dt><dd>{{ date(c.signedOn) }}</dd></div> }
                 @if (c.pdfSha256) {
-                  <div class="flex justify-between gap-3"><dt class="text-ink-soft">Empreinte PDF</dt><dd class="font-mono text-xs" [title]="'SHA-256 ' + c.pdfSha256">{{ c.pdfSha256.slice(0, 8) }}…{{ c.pdfSha256.slice(-4) }}</dd></div>
+                  <div class="flex justify-between gap-3"><dt class="text-ink-soft">Empreinte PDF émis</dt><dd class="font-mono text-xs" [title]="'SHA-256 ' + c.pdfSha256">{{ c.pdfSha256.slice(0, 8) }}…{{ c.pdfSha256.slice(-4) }}</dd></div>
+                }
+                @if (c.signedPdfSha256) {
+                  <div class="flex justify-between gap-3"><dt class="text-ink-soft">Empreinte PDF signé</dt><dd class="font-mono text-xs" [title]="'SHA-256 ' + c.signedPdfSha256">{{ c.signedPdfSha256.slice(0, 8) }}…{{ c.signedPdfSha256.slice(-4) }}</dd></div>
                 }
               </dl>
-              @if (c.status === 'EMIS') { <p class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-ink-soft">Téléchargez le PDF et transmettez-le au client. Le suivi (envoyé, signé) arrive au prochain lot.</p> }
+              @if (c.status === 'EMIS') { <p class="mt-3 rounded-lg bg-orchid-50 px-3 py-2 text-xs text-ink">Prochaine étape : téléchargez le PDF, transmettez-le au client, puis « Marquer envoyé ».</p> }
+              @else if (c.status === 'ENVOYE') { <p class="mt-3 rounded-lg bg-sky-50 px-3 py-2 text-xs text-ink">En attente de signature : déposez le PDF signé à son retour.</p> }
             </section>
             <section class="card p-4 text-sm" aria-labelledby="historique-titre">
               <h2 id="historique-titre" class="font-semibold">Historique</h2>
@@ -185,6 +202,7 @@ export class ContractPage implements OnInit, HasUnsavedChanges {
   private readonly api = inject(Api);
   private readonly confirm = inject(Confirm);
   private readonly dialog = inject(Dialog);
+  private readonly actions = inject(ContractActions);
 
   readonly id = input.required<string>();
   protected readonly statusLabels = CONTRACT_STATUS_LABELS;
@@ -224,6 +242,8 @@ export class ContractPage implements OnInit, HasUnsavedChanges {
 
   protected readonly pdfUrl = computed(() => this.api.contractPdfUrl(this.id()));
   protected readonly draftPdfUrl = computed(() => this.api.contractDraftPdfUrl(this.id()));
+  protected readonly signedPdfUrl = computed(() => this.api.contractSignedPdfUrl(this.id()));
+  protected readonly date = (iso: string) => frDate(iso.slice(0, 10));
   protected readonly dateTime = (iso: string) =>
     new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Paris' });
 
@@ -295,6 +315,24 @@ export class ContractPage implements OnInit, HasUnsavedChanges {
       this.fail(err);
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  async markSent(): Promise<void> {
+    await this.run(this.actions.markSent(this.contract()!));
+  }
+
+  async uploadSigned(): Promise<void> {
+    await this.run(this.actions.uploadSigned(this.contract()!));
+  }
+
+  private async run(action: Promise<ContractDetail | null>): Promise<void> {
+    this.error.set(null);
+    try {
+      const c = await action;
+      if (c) this.set(c);
+    } catch (err) {
+      this.fail(err);
     }
   }
 

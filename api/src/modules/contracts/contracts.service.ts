@@ -2,7 +2,7 @@ import { contractNumber } from '../../../../shared/company';
 import { parseMarkdown } from '../../../../shared/contrats/markdown';
 import { parseTemplate, renderTemplate } from '../../../../shared/contrats/modele';
 import { type ContractData, contractData } from '../../../../shared/contrats/variables';
-import { todayInParis } from '../../../../shared/dates';
+import { frDate, todayInParis } from '../../../../shared/dates';
 import type { Client, ContractDetail, ContractEvent, ContractEventAction, ContractStatus, ContractSummary } from '../../../../shared/types';
 import { nowIso } from '../../core/clock';
 import { newId, sha256 } from '../../core/crypto';
@@ -296,7 +296,7 @@ export async function uploadSigned(db: D1Database, bucket: R2Bucket, userId: str
     db
       .prepare(`UPDATE contracts SET status = 'SIGNE', signed_pdf_key = ?, signed_pdf_sha256 = ?, signed_on = ?, sent_at = COALESCE(sent_at, ?), updated_at = ? WHERE id = ?`)
       .bind(key, hash, signedOn, now, now, id),
-    eventStmt(db, id, 'SIGNATURE', userId, replacing ? `PDF signé remplacé (signé le ${signedOn})` : `Signé le ${signedOn}`),
+    eventStmt(db, id, 'SIGNATURE', userId, replacing ? `PDF signé remplacé (signé le ${frDate(signedOn)})` : `Signé le ${frDate(signedOn)}`),
   ]);
 }
 

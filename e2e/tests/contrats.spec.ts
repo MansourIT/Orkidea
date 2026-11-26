@@ -100,11 +100,26 @@ test.describe('Contrats générés', () => {
     await expect(page.getByRole('article')).toContainText(number);
 
     const download = page.waitForEvent('download');
-    await page.getByRole('link', { name: 'Télécharger le PDF' }).click();
+    await page.getByRole('link', { name: 'PDF émis' }).click();
     expect((await download).suggestedFilename()).toBe(`${number}.pdf`);
 
-    // Liste des contrats et panneau de la mission.
+    // Suivi depuis la liste : compteurs, panneau, envoi puis dépôt du PDF signé.
     await page.getByRole('link', { name: 'Contrats', exact: true }).click();
-    await expect(page.getByRole('row').filter({ hasText: number })).toContainText('Émis');
+    const toSend = page.getByRole('button', { name: /À envoyer/ });
+    await expect(toSend).toContainText('1');
+    await toSend.click();
+    await page.getByRole('row').filter({ hasText: number }).click();
+    const drawer = page.getByRole('dialog', { name: `Contrat ${number}` }).last();
+    await drawer.getByRole('button', { name: 'Marquer envoyé' }).click();
+    await page.getByLabel('Commentaire (destinataire, moyen d’envoi…)').fill('Envoyé à Sophie Bernard par email');
+    await page.getByRole('button', { name: 'Marquer envoyé' }).last().click();
+    await expect(drawer).toContainText('Envoyé · Envoyé à Sophie Bernard par email');
+    await drawer.getByRole('button', { name: 'Déposer le PDF signé' }).last().click();
+    await page.locator('#signe-fichier').setInputFiles({ name: 'signe.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7\n% signé\n%%EOF') });
+    await page.getByRole('button', { name: 'Marquer signé' }).click();
+    await expect(drawer.getByText('Contrat signé')).toBeVisible();
+    await drawer.getByRole('button', { name: 'Fermer' }).click();
+    await page.getByRole('button', { name: /Signés/ }).click();
+    await expect(page.getByRole('row').filter({ hasText: number })).toContainText('Signé');
   });
 });

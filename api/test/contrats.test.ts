@@ -185,7 +185,7 @@ describe('Suivi des contrats : envoi et signature', () => {
     const s = await json<ContractDetail>(res);
     expect(s).toMatchObject({ status: 'SIGNE', signedOn: '2026-11-27' });
     expect(s.signedPdfSha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(s.events[0]).toMatchObject({ action: 'SIGNATURE', comment: 'Signé le 2026-11-27' });
+    expect(s.events[0]).toMatchObject({ action: 'SIGNATURE', comment: 'Signé le 27/11/2026' });
     const file = await call(`/api/admin/contracts/${issued.id}/signed.pdf`, { cookie: admin });
     expect(file.headers.get('content-disposition')).toContain('CS-2026-001-signe.pdf');
     expect(new Uint8Array(await file.arrayBuffer())).toEqual(signed);

@@ -19,12 +19,12 @@ const VIEWS: SegmentOption<View>[] = [
   imports: [Segmented, ContractList, TemplateList, ContractReadiness],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div class="mb-4 flex min-w-0 flex-wrap items-end justify-between gap-3">
       <div>
         <h2 class="text-lg font-semibold">Contrats de prestation</h2>
         <p class="text-sm text-ink-soft">Modèles en Markdown avec variables, remplis avec les données des missions.</p>
       </div>
-      <app-segmented label="Vue" [options]="views" [value]="view()" (valueChange)="select($event)" />
+      <div class="max-w-full overflow-x-auto"><app-segmented label="Vue" [options]="views" [value]="view()" (valueChange)="select($event)" /></div>
     </div>
     @switch (view()) {
       @case ('contrats') { <app-contract-list /> }

@@ -122,6 +122,10 @@ export class Api {
   cancelContract = (id: string, reason: string) => this.send<ContractDetail>('POST', `/api/admin/contracts/${id}/cancel`, { reason });
   contractPdfUrl = (id: string) => `/api/admin/contracts/${id}/pdf`;
   contractDraftPdfUrl = (id: string) => `/api/admin/contracts/${id}/draft.pdf`;
+  contractSignedPdfUrl = (id: string) => `/api/admin/contracts/${id}/signed.pdf`;
+  markContractSent = (id: string, comment?: string) => this.send<ContractDetail>('POST', `/api/admin/contracts/${id}/sent`, { comment });
+  uploadSignedContract = (id: string, file: Blob, signedOn: string) =>
+    firstValueFrom(this.http.put<ContractDetail>(`/api/admin/contracts/${id}/signed`, file, { params: { signedOn }, headers: { 'content-type': 'application/pdf' } }));
 
   company = () => this.get<CompanySettings>('/api/admin/company');
   saveCompany = (c: CompanySettings) => this.send<CompanySettings>('PUT', '/api/admin/company', c);
