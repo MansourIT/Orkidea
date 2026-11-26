@@ -1,9 +1,13 @@
-# Mise en production : déclenchement MANUEL depuis la branche main uniquement
-# (Actions → « Déploiement » → Run workflow).
+# Mise en production continue : chaque push sur main dont la CI (types, tests, e2e) réussit est déployé
+# automatiquement. Redéploiement manuel possible : Actions → « Déploiement » → Run workflow (branche main).
 # Secrets requis dans l'environnement GitHub « production » : CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
 name: Déploiement
 
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -19,14 +23,21 @@ env:
 jobs:
   production:
     name: Migrations D1 puis wrangler deploy
-    if: github.ref == 'refs/heads/main'
+    # Automatique : seulement après une CI réussie sur un push de main (jamais pour une pull request).
+    # Manuel : seulement depuis main.
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
       name: production
       url: https://app.orkidea.fr
     steps:
+      # Déploie exactement le commit vérifié par la CI (et non un commit poussé entre-temps).
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-node@v7
         with:
@@ -46,12 +57,18 @@ jobs:
             exit 1
           fi
 
+      # Déjà faites par la CI pour un déploiement automatique ; refaites pour un déploiement manuel.
       - name: Vérifications avant déploiement
+        if: github.event_name == 'workflow_dispatch'
         run: |
           npm run typecheck
           npm run build
           npm test -w api
           npm test -w front
+
+      - name: Build du front
+        if: github.event_name == 'workflow_run'
+        run: npm run build
 
       - name: Migrations D1 (production)
         run: npm run db:migrate:remote -w api

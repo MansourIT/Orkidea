@@ -90,7 +90,7 @@ Navigateur : Chromium (`npx playwright install chromium` si besoin, version alig
 | Workflow | Déclenchement | Étapes |
 |---|---|---|
 | `ci.yml` — CI | chaque push et pull request | `npm ci` → types (API, front, e2e) → build du front → tests API → tests front ; puis job e2e : Chromium → build → Playwright (rapport et journal en artefact si échec) |
-| `deploy.yml` — Déploiement | **manuel** (Actions → Déploiement → Run workflow), **branche `main` uniquement**, environnement protégé `production` | contrôle de `database_id` → mêmes vérifications que la CI → migrations D1 distantes → `wrangler deploy` → contrôle `/api/health` |
+| `deploy.yml` — Déploiement | **automatique** après une CI réussie sur un push de `main` (fusion de PR comprise) ; **manuel** possible (Actions → Déploiement → Run workflow, branche `main`) ; environnement `production` | contrôle de `database_id` → build (vérifications complètes en manuel) → migrations D1 distantes → `wrangler deploy` → contrôle `/api/health` |
 
 `.gitlab-ci.yml` reprend les mêmes étapes (install → check → test → build → deploy manuel sur `main`) pour le jour où le dépôt passera sur GitLab : il n'a pas encore été exécuté.
 
@@ -140,14 +140,14 @@ Sans cette clé, l'API refuse d'envoyer les emails (aucun lien n'est jamais écr
 
 ### 4. GitHub
 
-1. Cloudflare → *My Profile → API Tokens* → modèle **« Edit Cloudflare Workers »**, en ajoutant la permission **D1 : Edit** ; limiter au compte Orkidea et à la zone `orkidea.fr`.
-2. GitHub → *Settings → Environments* → créer **`production`** : *Deployment branches* = `main`, *Required reviewers* = vous.
+1. Cloudflare → *My Profile → API Tokens* → modèle **« Edit Cloudflare Workers »**, en ajoutant les permissions **D1 : Edit** et **Workers R2 Storage : Edit** ; limiter au compte Orkidea et à la zone `orkidea.fr`.
+2. GitHub → *Settings → Environments* → créer **`production`** : *Deployment branches* = `main`. *Required reviewers* est facultatif : sans relecteur, chaque fusion dans `main` part en production dès que la CI est verte ; avec vous comme relecteur, le déploiement attend votre approbation (un clic dans Actions).
 3. Dans cet environnement, ajouter les secrets **`CLOUDFLARE_API_TOKEN`** et **`CLOUDFLARE_ACCOUNT_ID`** (identifiant visible sur le tableau de bord Cloudflare).
 
 ### 5. Premier déploiement
 
-1. Fusionner la branche de développement dans `main`.
-2. Actions → **Déploiement** → *Run workflow* (branche `main`) → approuver.
+1. Fusionner la branche de développement dans `main` : la CI tourne, puis le workflow **Déploiement** démarre tout seul s'il est vert (approbation éventuelle dans Actions).
+2. Pour redéployer sans nouveau commit : Actions → **Déploiement** → *Run workflow* (branche `main`).
 3. Vérifier https://app.orkidea.fr/api/health (le certificat du domaine peut prendre quelques minutes).
 
 ### 6. Comptes
