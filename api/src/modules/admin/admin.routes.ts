@@ -5,8 +5,8 @@ import { fail } from '../../core/errors';
 import { sendInBackground } from '../../core/mail';
 import { DateSchema, EmailSchema, IdSchema, jsonBody, MonthSchema, newRouter, ok, z } from '../../core/router';
 import { requireAdmin, requireUser } from '../auth/auth.middleware';
-import { saveSettings } from '../settings/settings.repository';
-import { AppSettingsSchema, DayPolicySchema, HolidayCodeSchema, HolidayRegionSchema } from '../settings/settings.schemas';
+import { loadCompany, saveCompany, saveSettings } from '../settings/settings.repository';
+import { AppSettingsSchema, CompanySettingsSchema, DayPolicySchema, HolidayCodeSchema, HolidayRegionSchema } from '../settings/settings.schemas';
 import { getTimesheetById } from '../timesheets/timesheets.repository';
 import { serviceCtx } from '../timesheets/timesheets.routes';
 import { timesheetPdf } from '../timesheets/timesheets.service';
@@ -145,12 +145,39 @@ adminRoutes.openapi(
   },
 );
 
+adminRoutes.openapi(
+  createRoute({ method: 'get', path: '/company', tags: ['Admin'], summary: 'Identité d’Orkidea pour les contrats', responses: { 200: ok('Société') } }),
+  async (c) => c.json(await loadCompany(c.env.DB), 200),
+);
+
+adminRoutes.openapi(
+  createRoute({ method: 'put', path: '/company', tags: ['Admin'], summary: 'Modification de l’identité d’Orkidea', request: { body: jsonBody(CompanySettingsSchema) }, responses: { 200: ok('Enregistrée') } }),
+  async (c) => {
+    const company = c.req.valid('json');
+    await saveCompany(c.env.DB, company, c.get('user').id);
+    return c.json(company, 200);
+  },
+);
+
 // ---------------------------------------------------------------- Utilisateurs
+
+/** Texte facultatif : vide → null. */
+const optText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v || null));
+const QualificationSchema = optText(120);
+const USER_COLUMNS = 'id, email, name, role, active, qualification';
+
 
 adminRoutes.openapi(
   createRoute({ method: 'get', path: '/users', tags: ['Admin'], summary: 'Utilisateurs', responses: { 200: ok('Liste') } }),
   async (c) => {
-    const { results } = await c.env.DB.prepare('SELECT id, email, name, role, active FROM users ORDER BY name').all<Omit<AdminUser, 'active'> & { active: number }>();
+    const { results } = await c.env.DB.prepare(`SELECT ${USER_COLUMNS} FROM users ORDER BY name`).all<Omit<AdminUser, 'active'> & { active: number }>();
     return c.json(results.map((u) => ({ ...u, active: !!u.active })), 200);
   },
 );
@@ -163,14 +190,16 @@ adminRoutes.openapi(
     path: '/users',
     tags: ['Admin'],
     summary: 'Création d’un utilisateur',
-    request: { body: jsonBody(z.object({ email: EmailSchema, name: LabelSchema, role: RoleSchema.optional() })) },
+    request: { body: jsonBody(z.object({ email: EmailSchema, name: LabelSchema, role: RoleSchema.optional(), qualification: QualificationSchema })) },
     responses: { 201: ok('Créé'), 409: ok('Email déjà utilisé') },
   }),
   async (c) => {
     const b = c.req.valid('json');
     if (await svc.emailTaken(c.env.DB, b.email)) throw fail(409, 'Un utilisateur existe déjà avec cet email');
     const id = crypto.randomUUID();
-    await c.env.DB.prepare('INSERT INTO users (id, email, name, role) VALUES (?, ?, ?, ?)').bind(id, b.email, b.name, b.role ?? 'consultant').run();
+    await c.env.DB.prepare('INSERT INTO users (id, email, name, role, qualification) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, b.email, b.name, b.role ?? 'consultant', b.qualification ?? null)
+      .run();
     return c.json({ id }, 201);
   },
 );
@@ -181,25 +210,39 @@ adminRoutes.openapi(
     path: '/users/{id}',
     tags: ['Admin'],
     summary: 'Modification / désactivation d’un utilisateur',
-    request: { params: IdParam, body: jsonBody(z.object({ email: EmailSchema.optional(), name: LabelSchema.optional(), role: RoleSchema.optional(), active: z.boolean().optional() })) },
+    request: { params: IdParam, body: jsonBody(z.object({ email: EmailSchema.optional(), name: LabelSchema.optional(), role: RoleSchema.optional(), active: z.boolean().optional(), qualification: QualificationSchema })) },
     responses: { 200: ok('Modifié'), 404: ok('Introuvable'), 409: ok('Conflit') },
   }),
   async (c) => {
     const { id } = c.req.valid('param');
     const b = c.req.valid('json');
     const me = c.get('user');
-    const current = await c.env.DB.prepare('SELECT id, email, name, role, active FROM users WHERE id = ?').bind(id).first<Omit<AdminUser, 'active'> & { active: number }>();
+    const current = await c.env.DB.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).bind(id).first<Omit<AdminUser, 'active'> & { active: number }>();
     if (!current) throw fail(404, 'Utilisateur introuvable');
     if (id === me.id && (b.active === false || b.role === 'consultant')) throw fail(409, 'Vous ne pouvez pas retirer vos propres droits d’administration');
     if (b.email && (await svc.emailTaken(c.env.DB, b.email, id))) throw fail(409, 'Un utilisateur existe déjà avec cet email');
-    const next = { ...current, ...b, active: b.active ?? !!current.active };
+    const next = {
+      id,
+      email: b.email ?? current.email,
+      name: b.name ?? current.name,
+      role: b.role ?? current.role,
+      active: b.active ?? !!current.active,
+      qualification: b.qualification === undefined ? current.qualification : b.qualification,
+    };
     const stmts = [
-      c.env.DB.prepare('UPDATE users SET email = ?, name = ?, role = ?, active = ? WHERE id = ?').bind(next.email, next.name, next.role, next.active ? 1 : 0, id),
+      c.env.DB.prepare('UPDATE users SET email = ?, name = ?, role = ?, active = ?, qualification = ? WHERE id = ?').bind(
+        next.email,
+        next.name,
+        next.role,
+        next.active ? 1 : 0,
+        next.qualification,
+        id,
+      ),
     ];
     // Désactivation : les sessions ouvertes sont coupées immédiatement.
     if (!next.active) stmts.push(c.env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id));
     await c.env.DB.batch(stmts);
-    return c.json({ id: next.id, email: next.email, name: next.name, role: next.role, active: next.active }, 200);
+    return c.json(next satisfies AdminUser, 200);
   },
 );
 
@@ -207,10 +250,45 @@ adminRoutes.openapi(
 
 const SiretSchema = z.string().regex(/^\d{14}$/, 'SIRET invalide (14 chiffres)');
 
+const ClientFields = {
+  siret: SiretSchema.nullable().optional(),
+  address: optText(200),
+  postalCode: optText(10),
+  city: optText(80),
+  representativeName: optText(120),
+  representativeRole: optText(80),
+  contractEmail: EmailSchema.nullable().optional(),
+};
+const CLIENT_COLUMNS = `id, name, siret, address, postal_code AS postalCode, city, representative_name AS representativeName,
+  representative_role AS representativeRole, contract_email AS contractEmail`;
+
+async function getClient(db: D1Database, id: string): Promise<Client> {
+  const row = await db.prepare(`SELECT ${CLIENT_COLUMNS} FROM clients WHERE id = ?`).bind(id).first<Client>();
+  if (!row) throw fail(404, 'Client introuvable');
+  return row;
+}
+
+function clientWrite(db: D1Database, id: string, cl: Client, insert: boolean): D1PreparedStatement {
+  const values = [cl.name, cl.siret, cl.address, cl.postalCode, cl.city, cl.representativeName, cl.representativeRole, cl.contractEmail];
+  return insert
+    ? db
+        .prepare(
+          `INSERT INTO clients (id, name, siret, address, postal_code, city, representative_name, representative_role, contract_email)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(id, ...values)
+    : db
+        .prepare(
+          `UPDATE clients SET name = ?, siret = ?, address = ?, postal_code = ?, city = ?, representative_name = ?, representative_role = ?,
+                  contract_email = ? WHERE id = ?`,
+        )
+        .bind(...values, id);
+}
+
 adminRoutes.openapi(
   createRoute({ method: 'get', path: '/clients', tags: ['Admin'], summary: 'Clients', responses: { 200: ok('Liste') } }),
   async (c) => {
-    const { results } = await c.env.DB.prepare('SELECT id, name, siret FROM clients ORDER BY name').all<Client>();
+    const { results } = await c.env.DB.prepare(`SELECT ${CLIENT_COLUMNS} FROM clients ORDER BY name`).all<Client>();
     return c.json(results, 200);
   },
 );
@@ -221,13 +299,24 @@ adminRoutes.openapi(
     path: '/clients',
     tags: ['Admin'],
     summary: 'Création d’un client',
-    request: { body: jsonBody(z.object({ name: LabelSchema, siret: SiretSchema.nullable().optional() })) },
+    request: { body: jsonBody(z.object({ name: LabelSchema, ...ClientFields })) },
     responses: { 201: ok('Créé') },
   }),
   async (c) => {
     const b = c.req.valid('json');
     const id = crypto.randomUUID();
-    await c.env.DB.prepare('INSERT INTO clients (id, name, siret) VALUES (?, ?, ?)').bind(id, b.name, b.siret ?? null).run();
+    const client: Client = {
+      id,
+      name: b.name,
+      siret: b.siret ?? null,
+      address: b.address ?? null,
+      postalCode: b.postalCode ?? null,
+      city: b.city ?? null,
+      representativeName: b.representativeName ?? null,
+      representativeRole: b.representativeRole ?? null,
+      contractEmail: b.contractEmail ?? null,
+    };
+    await clientWrite(c.env.DB, id, client, true).run();
     return c.json({ id }, 201);
   },
 );
@@ -238,16 +327,16 @@ adminRoutes.openapi(
     path: '/clients/{id}',
     tags: ['Admin'],
     summary: 'Modification d’un client',
-    request: { params: IdParam, body: jsonBody(z.object({ name: LabelSchema.optional(), siret: SiretSchema.nullable().optional() })) },
+    request: { params: IdParam, body: jsonBody(z.object({ name: LabelSchema.optional(), ...ClientFields })) },
     responses: { 200: ok('Modifié'), 404: ok('Introuvable') },
   }),
   async (c) => {
     const { id } = c.req.valid('param');
     const b = c.req.valid('json');
-    const current = await c.env.DB.prepare('SELECT id, name, siret FROM clients WHERE id = ?').bind(id).first<Client>();
-    if (!current) throw fail(404, 'Client introuvable');
-    const next = { ...current, ...b, siret: b.siret === undefined ? current.siret : b.siret };
-    await c.env.DB.prepare('UPDATE clients SET name = ?, siret = ? WHERE id = ?').bind(next.name, next.siret, id).run();
+    const current = await getClient(c.env.DB, id);
+    const next = { ...current };
+    for (const [k, v] of Object.entries(b) as Array<[keyof Client, string | null | undefined]>) if (v !== undefined) (next as Record<string, unknown>)[k] = v;
+    await clientWrite(c.env.DB, id, next, false).run();
     return c.json(next, 200);
   },
 );
@@ -266,6 +355,10 @@ const MissionFields = {
   holidayPolicy: DayPolicySchema.nullable().optional(),
   workedHolidays: z.array(HolidayCodeSchema).max(13).nullable().optional(),
   holidayRegion: HolidayRegionSchema.nullable().optional(),
+  purpose: optText(2000),
+  location: optText(200),
+  terms: optText(2000),
+  paymentTermsDays: z.number().int().min(0).max(60, 'Délai de paiement : 60 jours au plus').nullable().optional(),
 };
 
 const MissionCreate = z.object({
@@ -288,6 +381,10 @@ const MissionPatch = z.object({
   holidayPolicy: MissionFields.holidayPolicy,
   workedHolidays: MissionFields.workedHolidays,
   holidayRegion: MissionFields.holidayRegion,
+  purpose: MissionFields.purpose,
+  location: MissionFields.location,
+  terms: MissionFields.terms,
+  paymentTermsDays: MissionFields.paymentTermsDays,
   active: z.boolean().optional(),
   color: ColorSchema.optional(),
   addActivities: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
@@ -334,8 +431,8 @@ adminRoutes.openapi(
     await c.env.DB.batch([
       c.env.DB.prepare(
         `INSERT INTO missions (id, consultant_id, client_id, label, start_date, end_date, tjm, client_validation, validator_name, validator_email,
-                               weekend_policy, holiday_policy, worked_holidays, holiday_region)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                               weekend_policy, holiday_policy, worked_holidays, holiday_region, purpose, location, terms, payment_terms_days)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         id,
         b.consultantId,
@@ -351,6 +448,10 @@ adminRoutes.openapi(
         b.holidayPolicy ?? null,
         json(b.workedHolidays),
         b.holidayRegion ?? null,
+        b.purpose ?? null,
+        b.location ?? null,
+        b.terms ?? null,
+        b.paymentTermsDays ?? null,
       ),
       ...labels.map((label) => svc.newActivityStmt(c.env.DB, id, label, color)),
     ]);
@@ -384,13 +485,18 @@ adminRoutes.openapi(
       holidayPolicy: pick('holidayPolicy', m.holidayPolicy),
       workedHolidays: pick('workedHolidays', m.workedHolidays),
       holidayRegion: pick('holidayRegion', m.holidayRegion),
+      purpose: pick('purpose', m.purpose) as string | null,
+      location: pick('location', m.location) as string | null,
+      terms: pick('terms', m.terms) as string | null,
+      paymentTermsDays: pick('paymentTermsDays', m.paymentTermsDays) as number | null,
       active: b.active ?? m.active,
     };
     checkMission(next);
     const stmts = [
       c.env.DB.prepare(
         `UPDATE missions SET label = ?, start_date = ?, end_date = ?, tjm = ?, client_validation = ?, validator_name = ?, validator_email = ?,
-                weekend_policy = ?, holiday_policy = ?, worked_holidays = ?, holiday_region = ?, active = ? WHERE id = ?`,
+                weekend_policy = ?, holiday_policy = ?, worked_holidays = ?, holiday_region = ?, purpose = ?, location = ?, terms = ?,
+                payment_terms_days = ?, active = ? WHERE id = ?`,
       ).bind(
         next.label,
         next.startDate,
@@ -403,6 +509,10 @@ adminRoutes.openapi(
         next.holidayPolicy ?? null,
         json(next.workedHolidays),
         next.holidayRegion ?? null,
+        next.purpose,
+        next.location,
+        next.terms,
+        next.paymentTermsDays,
         next.active ? 1 : 0,
         id,
       ),

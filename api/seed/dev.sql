@@ -28,3 +28,12 @@ INSERT INTO missions (id, consultant_id, client_id, label, start_date, tjm, clie
 INSERT INTO activities (id, mission_id, label, kind, color) VALUES
   ('a-gamma-sup',  'm-gamma', 'Support',   'travail', '#22C55E'),
   ('a-gamma-for',  'm-gamma', 'Formation', 'travail', '#22C55E');
+
+-- Données contractuelles (contrats de prestation) : client et mission Alpha complets, Beta partiels.
+UPDATE clients SET siret = '12345678900011', address = '12 rue de la Paix', postal_code = '75002', city = 'Paris',
+  representative_name = 'Sophie Bernard', representative_role = 'Directrice des achats', contract_email = 'contrats@client-alpha.example'
+  WHERE id = 'c-alpha';
+UPDATE missions SET purpose = 'Refonte de la plateforme de paiement', location = 'Paris (2 jours de télétravail par semaine)',
+  terms = 'Prestation en régie, facturée mensuellement sur la base du CRA validé.', payment_terms_days = 30
+  WHERE id = 'm-alpha';
+UPDATE users SET qualification = 'Architecte logiciel' WHERE id = 'u-jd';

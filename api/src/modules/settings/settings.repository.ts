@@ -1,6 +1,7 @@
+import { DEFAULT_COMPANY, type CompanySettings } from '../../../../shared/company';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../../shared/settings';
 import { nowIso } from '../../core/clock';
-import { AppSettingsSchema } from './settings.schemas';
+import { AppSettingsSchema, CompanySettingsSchema } from './settings.schemas';
 
 /** Paramétrage global : valeurs enregistrées fusionnées avec les valeurs par défaut. */
 export async function loadSettings(db: D1Database): Promise<AppSettings> {
@@ -26,5 +27,27 @@ export async function saveSettings(db: D1Database, settings: AppSettings, userId
        ON CONFLICT (key) DO UPDATE SET value = ?1, updated_at = ?2, updated_by = ?3`,
     )
     .bind(JSON.stringify(settings), nowIso(), userId)
+    .run();
+}
+
+/** Identité d'Orkidea pour les contrats (clé 'societe'), complétée par les valeurs par défaut. */
+export async function loadCompany(db: D1Database): Promise<CompanySettings> {
+  const row = await db.prepare(`SELECT value FROM settings WHERE key = 'societe'`).first<{ value: string }>();
+  if (!row) return DEFAULT_COMPANY;
+  try {
+    const parsed = CompanySettingsSchema.safeParse({ ...DEFAULT_COMPANY, ...(JSON.parse(row.value) as Partial<CompanySettings>) });
+    return parsed.success ? parsed.data : DEFAULT_COMPANY;
+  } catch {
+    return DEFAULT_COMPANY;
+  }
+}
+
+export async function saveCompany(db: D1Database, company: CompanySettings, userId: string): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO settings (key, value, updated_at, updated_by) VALUES ('societe', ?1, ?2, ?3)
+       ON CONFLICT (key) DO UPDATE SET value = ?1, updated_at = ?2, updated_by = ?3`,
+    )
+    .bind(JSON.stringify(company), nowIso(), userId)
     .run();
 }

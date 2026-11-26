@@ -128,13 +128,26 @@ export interface AdminTimesheetDetail {
 
 export interface AdminUser extends User {
   active: boolean;
+  /** Qualification du consultant, reprise dans les contrats (ex. « Architecte logiciel »). */
+  qualification: string | null;
 }
 
 export interface Client {
   id: string;
   name: string;
   siret: string | null;
+  address: string | null;
+  postalCode: string | null;
+  city: string | null;
+  /** Signataire du contrat côté client. */
+  representativeName: string | null;
+  representativeRole: string | null;
+  /** Destinataire des contrats (peut différer du valideur des CRA). */
+  contractEmail: string | null;
 }
+
+/** Champs modifiables d'un client (création et modification). */
+export type ClientInput = Omit<Client, 'id'>;
 
 export interface Mission extends MissionCalendarOverrides {
   id: string;
@@ -149,6 +162,11 @@ export interface Mission extends MissionCalendarOverrides {
   clientValidation: boolean;
   validatorName: string | null;
   validatorEmail: string | null;
+  /** Objet de la prestation, lieu, modalités d'exécution et délai de paiement (contrat de prestation). */
+  purpose: string | null;
+  location: string | null;
+  terms: string | null;
+  paymentTermsDays: number | null;
   active: boolean;
   activities: Array<{ id: string; label: string; color: string; active: boolean }>;
 }
