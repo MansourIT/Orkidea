@@ -5,7 +5,7 @@ test.use({ storageState: adminState });
 
 test.describe('Modèles de contrat', () => {
   test('création depuis la démonstration, erreur bloquante, publication, comparaison, v2 en brouillon', async ({ page }) => {
-    await page.goto('/admin?onglet=contrats');
+    await page.goto('/admin?onglet=contrats&vue=modeles');
     await page.getByRole('button', { name: 'Nouveau modèle' }).first().click();
     await page.getByLabel('Nom du modèle').fill('Régie e2e');
     await page.getByRole('button', { name: 'Créer et ouvrir' }).click();
@@ -52,12 +52,59 @@ test.describe('Modèles de contrat', () => {
   });
 
   test('garde : quitter l’éditeur avec des modifications demande confirmation', async ({ page }) => {
-    await page.goto('/admin?onglet=contrats');
+    await page.goto('/admin?onglet=contrats&vue=modeles');
     await page.getByRole('listitem').filter({ hasText: 'Régie e2e' }).getByRole('link', { name: 'Modifier' }).click();
     await page.locator('textarea').fill('Texte modifié');
     await page.getByRole('link', { name: 'Modèles' }).click();
     await expect(page.getByText('Modèle non enregistré')).toBeVisible();
     await page.getByRole('button', { name: 'Rester' }).click();
     await expect(page).toHaveURL(/\/admin\/modeles\//);
+  });
+});
+
+test.describe('Contrats générés', () => {
+  test('génération depuis la mission, données manquantes, ajustement, émission et PDF', async ({ page }) => {
+    // Modèle « Régie e2e » publié par le parcours précédent ; on part de la mission Alpha.
+    await page.goto('/admin?onglet=missions');
+    await page.getByText('Projet Alpha').first().click();
+    await page.getByRole('button', { name: 'Générer un contrat' }).click();
+    await page.getByRole('radio', { name: /Régie e2e/ }).check();
+    await page.getByRole('button', { name: 'Créer le brouillon' }).click();
+    await page.waitForURL(/\/admin\/contrats\//);
+    await expect(page.getByRole('heading', { name: 'Contrat en brouillon' })).toBeVisible();
+
+    // Fiche société incomplète : émission impossible, lien vers Paramètres.
+    await expect(page.getByText('Données à compléter avant l’émission')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Émettre le contrat' })).toBeDisabled();
+    const company = {
+      legalName: 'Orkidea', legalForm: 'SASU', capital: '1 000 €', siret: '98765432100019', rcs: 'Paris 987 654 321', vatNumber: '',
+      address: '1 avenue des Orchidées', postalCode: '75008', city: 'Paris', representativeName: 'Camille Bernard', representativeRole: 'Président',
+      financialGuarantee: 'Garantie n° 123, Banque X', contractNumberPrefix: 'CS',
+    };
+    expect((await page.request.put('/api/admin/company', { data: company })).ok()).toBe(true);
+    await page.getByRole('button', { name: 'Actualiser les données' }).click();
+    await expect(page.getByText('Prêt à émettre')).toBeVisible();
+
+    // Ajustement d'une clause, visible dans l'aperçu et compté comme écart au modèle.
+    const area = page.locator('textarea');
+    await area.fill(`${await area.inputValue()}\nClause particulière : confidentialité renforcée.\n`);
+    await expect(page.getByRole('article', { name: 'Aperçu du contrat' })).toContainText('confidentialité renforcée');
+    await expect(page.getByText(/Ajusté : \+\d+/)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Émettre le contrat' }).click();
+    await page.getByRole('button', { name: 'Émettre', exact: true }).click();
+    const heading = page.getByRole('heading', { name: /^Contrat CS-\d{4}-\d{3}$/ });
+    await expect(heading).toBeVisible();
+    const number = (await heading.textContent())!.replace('Contrat ', '');
+    await expect(page.getByText('Émis', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('article')).toContainText(number);
+
+    const download = page.waitForEvent('download');
+    await page.getByRole('link', { name: 'Télécharger le PDF' }).click();
+    expect((await download).suggestedFilename()).toBe(`${number}.pdf`);
+
+    // Liste des contrats et panneau de la mission.
+    await page.getByRole('link', { name: 'Contrats', exact: true }).click();
+    await expect(page.getByRole('row').filter({ hasText: number })).toContainText('Émis');
   });
 });

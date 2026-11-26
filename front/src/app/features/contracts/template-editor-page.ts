@@ -49,7 +49,7 @@ export const slug = (s: string) =>
       @let t = template()!;
       <!-- En-tête -->
       <div class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <a routerLink="/admin" [queryParams]="{ onglet: 'contrats' }" class="btn-ghost -ml-2 px-2 text-sm"><ng-icon name="lucideChevronLeft" size="16" aria-hidden="true" /> Modèles</a>
+        <a routerLink="/admin" [queryParams]="{ onglet: 'contrats', vue: 'modeles' }" class="btn-ghost -ml-2 px-2 text-sm"><ng-icon name="lucideChevronLeft" size="16" aria-hidden="true" /> Modèles</a>
         <div class="min-w-0">
           <h1 class="flex items-center gap-2 text-xl font-bold">
             <span class="truncate">{{ t.name }}</span>

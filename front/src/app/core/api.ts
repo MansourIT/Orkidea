@@ -10,6 +10,8 @@ import type {
   Client,
   ClientConfig,
   ClientInput,
+  ContractDetail,
+  ContractSummary,
   ContractTemplateDetail,
   ContractTemplateSummary,
   Entry,
@@ -109,6 +111,17 @@ export class Api {
   discardTemplateDraft = (id: string) => firstValueFrom(this.http.delete<ContractTemplateDetail>(`/api/admin/contract-templates/${id}/draft`));
   publishTemplate = (id: string) => this.send<ContractTemplateDetail>('POST', `/api/admin/contract-templates/${id}/publish`);
   templateVersion = (id: string, version: number) => this.get<{ version: number; body: string }>(`/api/admin/contract-templates/${id}/versions/${version}`);
+
+  // Contrats générés
+  contracts = (missionId?: string) => this.get<ContractSummary[]>('/api/admin/contracts', missionId ? { missionId } : undefined);
+  contract = (id: string) => this.get<ContractDetail>(`/api/admin/contracts/${id}`);
+  createContract = (missionId: string, templateId: string) => this.send<{ id: string }>('POST', '/api/admin/contracts', { missionId, templateId });
+  saveContractBody = (id: string, body: string, baseUpdatedAt: string) => this.send<ContractDetail>('PUT', `/api/admin/contracts/${id}/body`, { body, baseUpdatedAt });
+  resetContract = (id: string) => this.send<ContractDetail>('POST', `/api/admin/contracts/${id}/reset`);
+  issueContract = (id: string, baseUpdatedAt: string) => this.send<ContractDetail>('POST', `/api/admin/contracts/${id}/issue`, { baseUpdatedAt });
+  cancelContract = (id: string, reason: string) => this.send<ContractDetail>('POST', `/api/admin/contracts/${id}/cancel`, { reason });
+  contractPdfUrl = (id: string) => `/api/admin/contracts/${id}/pdf`;
+  contractDraftPdfUrl = (id: string) => `/api/admin/contracts/${id}/draft.pdf`;
 
   company = () => this.get<CompanySettings>('/api/admin/company');
   saveCompany = (c: CompanySettings) => this.send<CompanySettings>('PUT', '/api/admin/company', c);

@@ -45,6 +45,13 @@ export const routes: Routes = [
         canDeactivate: [unsavedChangesGuard],
         loadComponent: () => import('./features/contracts/template-editor-page').then((m) => m.TemplateEditorPage),
       },
+      {
+        path: 'admin/contrats/:id',
+        title: T('Contrat de prestation'),
+        canActivate: [adminGuard],
+        canDeactivate: [unsavedChangesGuard],
+        loadComponent: () => import('./features/contracts/contract-page').then((m) => m.ContractPage),
+      },
       { path: 'admin', title: T('Administration'), canActivate: [adminGuard], canDeactivate: [unsavedChangesGuard], loadComponent: () => import('./features/admin/admin-page').then((m) => m.AdminPage) },
     ],
   },
