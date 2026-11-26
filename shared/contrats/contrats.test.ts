@@ -218,3 +218,18 @@ describe('modèle de démonstration', () => {
     expect(blocks.filter((b) => b.t === 'h').length).toBe(7); // titre + 6 articles
   });
 });
+
+describe('comparaison de versions', () => {
+  it('lignes conservées, ajoutées et supprimées, avec leurs numéros', async () => {
+    const { lineDiff, diffStats } = await import('./diff');
+    const d = lineDiff('A\nB\nC', 'A\nC\nD');
+    expect(d).toEqual([
+      { op: '=', text: 'A', oldLine: 1, newLine: 1 },
+      { op: '-', text: 'B', oldLine: 2, newLine: null },
+      { op: '=', text: 'C', oldLine: 3, newLine: 2 },
+      { op: '+', text: 'D', oldLine: null, newLine: 3 },
+    ]);
+    expect(diffStats(d)).toEqual({ added: 1, removed: 1 });
+    expect(diffStats(lineDiff('x', 'x'))).toEqual({ added: 0, removed: 0 });
+  });
+});

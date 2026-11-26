@@ -4,3 +4,4 @@ export * from './modele';
 export * from './modele-demo';
 export * from './nombres';
 export * from './variables';
+export * from './diff';

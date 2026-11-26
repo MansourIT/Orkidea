@@ -206,3 +206,37 @@ export interface ApiError {
 }
 
 export type { HolidayCode, HolidayRegion };
+
+// ---------------------------------------------------------------- Modèles de contrat
+
+export type TemplateVersionStatus = 'BROUILLON' | 'PUBLIEE';
+
+/** Ligne de la liste des modèles (GET /api/admin/contract-templates). */
+export interface ContractTemplateSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  archived: boolean;
+  createdAt: string;
+  /** Dernière version publiée (utilisée pour générer les contrats). */
+  published: { version: number; publishedAt: string } | null;
+  /** Brouillon en cours (au plus un par modèle). */
+  draft: { version: number; updatedAt: string } | null;
+  contractsCount: number;
+}
+
+export interface TemplateVersionInfo {
+  version: number;
+  status: TemplateVersionStatus;
+  updatedAt: string;
+  updatedBy: string | null;
+  publishedAt: string | null;
+  publishedBy: string | null;
+}
+
+/** Modèle ouvert dans l'éditeur (GET /api/admin/contract-templates/:id). */
+export interface ContractTemplateDetail extends ContractTemplateSummary {
+  versions: TemplateVersionInfo[];
+  draftBody: string | null;
+  publishedBody: string | null;
+}
