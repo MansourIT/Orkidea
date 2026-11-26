@@ -150,6 +150,18 @@ Sans cette clé, l'API refuse d'envoyer les emails (aucun lien n'est jamais écr
 2. Pour redéployer sans nouveau commit : Actions → **Déploiement** → *Run workflow* (branche `main`).
 3. Vérifier https://app.orkidea.fr/api/health (le certificat du domaine peut prendre quelques minutes).
 
+### Dépannage : se connecter sans email
+
+Si les emails ne partent plus (clé Brevo invalide, domaine non authentifié…), un administrateur qui a accès au compte Cloudflare peut créer lui-même un lien de connexion :
+
+```bash
+npx wrangler login                                   # une fois ; réseau d'entreprise : $env:NODE_OPTIONS="--use-system-ca"
+npm run lien-secours -- contact@orkidea.fr           # production
+npm run lien-secours -- contact@orkidea.fr --local   # base locale (wrangler dev)
+```
+
+Le script crée un lien ordinaire (usage unique, 15 minutes) directement dans la base D1 avec vos identifiants Cloudflare et l'affiche dans le terminal : aucune porte dérobée n'existe dans l'API. Ne partagez pas ce lien. Les raisons d'échec d'envoi sont visibles dans Cloudflare → Workers → `orkidea-cra` → Logs (`Envoi email (…)`).
+
 ### 6. Comptes
 
 Créer le premier compte admin (les autres comptes se créent ensuite dans l'application, onglet *Consultants*) :
