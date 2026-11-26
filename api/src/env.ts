@@ -2,6 +2,8 @@ import type { User } from '../../shared/types';
 
 export interface Bindings {
   DB: D1Database;
+  /** PDF des contrats (bucket R2 privé, juridiction UE). */
+  CONTRACTS: R2Bucket;
   ASSETS?: Fetcher;
   /** URL publique de l'app, ex. https://app.orkidea.fr */
   APP_URL: string;

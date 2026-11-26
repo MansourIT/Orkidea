@@ -5,6 +5,7 @@ import { onError } from './core/errors';
 import { newRouter } from './core/router';
 import { scheduled } from './cron';
 import { adminRoutes } from './modules/admin/admin.routes';
+import { contractRoutes } from './modules/contracts/contracts.routes';
 import { templateRoutes } from './modules/contracts/templates.routes';
 import { authRoutes } from './modules/auth/auth.routes';
 import { timesheetRoutes } from './modules/timesheets/timesheets.routes';
@@ -35,6 +36,7 @@ app.get('/api/health', (c) => c.json({ ok: true }));
 app.route('/api/auth', authRoutes);
 app.route('/api/public/validations', validationRoutes);
 app.route('/api/admin/contract-templates', templateRoutes);
+app.route('/api/admin/contracts', contractRoutes);
 app.route('/api/admin', adminRoutes);
 
 app.doc('/api/openapi.json', {

@@ -240,3 +240,55 @@ export interface ContractTemplateDetail extends ContractTemplateSummary {
   draftBody: string | null;
   publishedBody: string | null;
 }
+
+// ---------------------------------------------------------------- Contrats générés
+
+/** BROUILLON (texte ajustable) → EMIS (numéroté, PDF figé) → ENVOYE → SIGNE ; ANNULE à tout moment avant signature. */
+export type ContractStatus = 'BROUILLON' | 'EMIS' | 'ENVOYE' | 'SIGNE' | 'ANNULE';
+
+export const CONTRACT_STATUS_LABELS: Record<ContractStatus, string> = {
+  BROUILLON: 'Brouillon',
+  EMIS: 'Émis',
+  ENVOYE: 'Envoyé',
+  SIGNE: 'Signé',
+  ANNULE: 'Annulé',
+};
+
+export type ContractEventAction = 'CREATION' | 'MODIFICATION' | 'EMISSION' | 'ENVOI' | 'SIGNATURE' | 'ANNULATION';
+
+export interface ContractSummary {
+  id: string;
+  number: string | null;
+  status: ContractStatus;
+  mission: { id: string; label: string };
+  client: string;
+  consultant: string;
+  template: { id: string; name: string; version: number };
+  createdAt: string;
+  issuedAt: string | null;
+  updatedAt: string;
+}
+
+export interface ContractEvent {
+  action: ContractEventAction;
+  actor: string;
+  comment: string | null;
+  createdAt: string;
+}
+
+/** Contrat ouvert (GET /api/admin/contracts/:id). */
+export interface ContractDetail extends ContractSummary {
+  /**
+   * Texte source : modèle + ajustements, variables comprises. Les valeurs sont celles de `data`
+   * (calculées à l'instant pour un brouillon, figées à l'émission ensuite).
+   */
+  body: string;
+  /** Texte de la version du modèle, pour mesurer les ajustements. */
+  templateBody: string;
+  data: Record<string, string | boolean | null>;
+  /** Variables vides : l'émission est impossible tant que la liste n'est pas vide. */
+  missing: string[];
+  pdfSha256: string | null;
+  cancelReason: string | null;
+  events: ContractEvent[];
+}

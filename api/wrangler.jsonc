@@ -24,6 +24,15 @@
 			"migrations_dir": "migrations"
 		}
 	],
+	// PDF des contrats de prestation (émis et signés). Bucket privé, juridiction UE :
+	// npx wrangler r2 bucket create orkidea-contrats --jurisdiction eu
+	"r2_buckets": [
+		{
+			"binding": "CONTRACTS",
+			"bucket_name": "orkidea-contrats",
+			"jurisdiction": "eu"
+		}
+	],
 	"vars": {
 		"APP_URL": "https://app.orkidea.fr",
 		"MAIL_FROM": "Orkidea CRA <cra@orkidea.fr>"
