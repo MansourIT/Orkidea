@@ -9,6 +9,11 @@ import type {
   ApiError,
   Client,
   ClientConfig,
+  ClientInput,
+  ContractDetail,
+  ContractSummary,
+  ContractTemplateDetail,
+  ContractTemplateSummary,
   Entry,
   Mission,
   PublicValidationView,
@@ -17,6 +22,7 @@ import type {
   TimesheetSummary,
   User,
 } from '@shared/types';
+import type { CompanySettings } from '@shared/company';
 import type { AppSettings, MissionCalendarOverrides } from '@shared/settings';
 
 /** Champs modifiables d'une mission (création et modification). */
@@ -28,6 +34,10 @@ export interface MissionInput extends MissionCalendarOverrides {
   clientValidation: boolean;
   validatorName: string | null;
   validatorEmail: string | null;
+  purpose: string | null;
+  location: string | null;
+  terms: string | null;
+  paymentTermsDays: number | null;
 }
 
 /** Client HTTP typé de l'API (même origine : cookie de session automatique). */
@@ -76,11 +86,11 @@ export class Api {
   exportUrl = (month: string) => `/api/admin/timesheets/export?month=${month}`;
   adminPdfUrl = (id: string) => `/api/admin/timesheets/${id}/pdf`;
   users = () => this.get<AdminUser[]>('/api/admin/users');
-  createUser = (body: { email: string; name: string; role: 'consultant' | 'admin' }) => this.send<{ id: string }>('POST', '/api/admin/users', body);
+  createUser = (body: { email: string; name: string; role: 'consultant' | 'admin'; qualification?: string | null }) => this.send<{ id: string }>('POST', '/api/admin/users', body);
   updateUser = (id: string, body: Partial<Omit<AdminUser, 'id'>>) => this.send<AdminUser>('PATCH', `/api/admin/users/${id}`, body);
   clients = () => this.get<Client[]>('/api/admin/clients');
-  createClient = (body: { name: string; siret?: string | null }) => this.send<{ id: string }>('POST', '/api/admin/clients', body);
-  updateClient = (id: string, body: { name?: string; siret?: string | null }) => this.send<Client>('PATCH', `/api/admin/clients/${id}`, body);
+  createClient = (body: ClientInput) => this.send<{ id: string }>('POST', '/api/admin/clients', body);
+  updateClient = (id: string, body: Partial<ClientInput>) => this.send<Client>('PATCH', `/api/admin/clients/${id}`, body);
   updateActivity = (id: string, body: { label?: string; color?: string; active?: boolean }) =>
     this.send<{ id: string; label: string; color: string; active: boolean }>('PATCH', `/api/admin/activities/${id}`, body);
   missions = () => this.get<Mission[]>('/api/admin/missions');
@@ -90,6 +100,35 @@ export class Api {
     this.send<Mission>('PATCH', `/api/admin/missions/${id}`, body);
   settings = () => this.get<AppSettings>('/api/admin/settings');
   saveSettings = (s: AppSettings) => this.send<AppSettings>('PUT', '/api/admin/settings', s);
+  // Modèles de contrat
+  templates = () => this.get<ContractTemplateSummary[]>('/api/admin/contract-templates');
+  template = (id: string) => this.get<ContractTemplateDetail>(`/api/admin/contract-templates/${id}`);
+  createTemplate = (body: { name: string; description?: string | null; body: string }) => this.send<{ id: string }>('POST', '/api/admin/contract-templates', body);
+  updateTemplate = (id: string, body: { name?: string; description?: string | null; archived?: boolean }) =>
+    this.send<ContractTemplateDetail>('PATCH', `/api/admin/contract-templates/${id}`, body);
+  saveTemplateDraft = (id: string, body: string, baseUpdatedAt: string | null) =>
+    this.send<ContractTemplateDetail>('PUT', `/api/admin/contract-templates/${id}/draft`, { body, baseUpdatedAt });
+  discardTemplateDraft = (id: string) => firstValueFrom(this.http.delete<ContractTemplateDetail>(`/api/admin/contract-templates/${id}/draft`));
+  publishTemplate = (id: string) => this.send<ContractTemplateDetail>('POST', `/api/admin/contract-templates/${id}/publish`);
+  templateVersion = (id: string, version: number) => this.get<{ version: number; body: string }>(`/api/admin/contract-templates/${id}/versions/${version}`);
+
+  // Contrats générés
+  contracts = (missionId?: string) => this.get<ContractSummary[]>('/api/admin/contracts', missionId ? { missionId } : undefined);
+  contract = (id: string) => this.get<ContractDetail>(`/api/admin/contracts/${id}`);
+  createContract = (missionId: string, templateId: string) => this.send<{ id: string }>('POST', '/api/admin/contracts', { missionId, templateId });
+  saveContractBody = (id: string, body: string, baseUpdatedAt: string) => this.send<ContractDetail>('PUT', `/api/admin/contracts/${id}/body`, { body, baseUpdatedAt });
+  resetContract = (id: string) => this.send<ContractDetail>('POST', `/api/admin/contracts/${id}/reset`);
+  issueContract = (id: string, baseUpdatedAt: string) => this.send<ContractDetail>('POST', `/api/admin/contracts/${id}/issue`, { baseUpdatedAt });
+  cancelContract = (id: string, reason: string) => this.send<ContractDetail>('POST', `/api/admin/contracts/${id}/cancel`, { reason });
+  contractPdfUrl = (id: string) => `/api/admin/contracts/${id}/pdf`;
+  contractDraftPdfUrl = (id: string) => `/api/admin/contracts/${id}/draft.pdf`;
+  contractSignedPdfUrl = (id: string) => `/api/admin/contracts/${id}/signed.pdf`;
+  markContractSent = (id: string, comment?: string) => this.send<ContractDetail>('POST', `/api/admin/contracts/${id}/sent`, { comment });
+  uploadSignedContract = (id: string, file: Blob, signedOn: string) =>
+    firstValueFrom(this.http.put<ContractDetail>(`/api/admin/contracts/${id}/signed`, file, { params: { signedOn }, headers: { 'content-type': 'application/pdf' } }));
+
+  company = () => this.get<CompanySettings>('/api/admin/company');
+  saveCompany = (c: CompanySettings) => this.send<CompanySettings>('PUT', '/api/admin/company', c);
 }
 
 /** Erreur API normalisée (message en français fourni par le serveur). */

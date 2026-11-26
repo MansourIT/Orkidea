@@ -128,13 +128,26 @@ export interface AdminTimesheetDetail {
 
 export interface AdminUser extends User {
   active: boolean;
+  /** Qualification du consultant, reprise dans les contrats (ex. « Architecte logiciel »). */
+  qualification: string | null;
 }
 
 export interface Client {
   id: string;
   name: string;
   siret: string | null;
+  address: string | null;
+  postalCode: string | null;
+  city: string | null;
+  /** Signataire du contrat côté client. */
+  representativeName: string | null;
+  representativeRole: string | null;
+  /** Destinataire des contrats (peut différer du valideur des CRA). */
+  contractEmail: string | null;
 }
+
+/** Champs modifiables d'un client (création et modification). */
+export type ClientInput = Omit<Client, 'id'>;
 
 export interface Mission extends MissionCalendarOverrides {
   id: string;
@@ -149,6 +162,11 @@ export interface Mission extends MissionCalendarOverrides {
   clientValidation: boolean;
   validatorName: string | null;
   validatorEmail: string | null;
+  /** Objet de la prestation, lieu, modalités d'exécution et délai de paiement (contrat de prestation). */
+  purpose: string | null;
+  location: string | null;
+  terms: string | null;
+  paymentTermsDays: number | null;
   active: boolean;
   activities: Array<{ id: string; label: string; color: string; active: boolean }>;
 }
@@ -188,3 +206,93 @@ export interface ApiError {
 }
 
 export type { HolidayCode, HolidayRegion };
+
+// ---------------------------------------------------------------- Modèles de contrat
+
+export type TemplateVersionStatus = 'BROUILLON' | 'PUBLIEE';
+
+/** Ligne de la liste des modèles (GET /api/admin/contract-templates). */
+export interface ContractTemplateSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  archived: boolean;
+  createdAt: string;
+  /** Dernière version publiée (utilisée pour générer les contrats). */
+  published: { version: number; publishedAt: string } | null;
+  /** Brouillon en cours (au plus un par modèle). */
+  draft: { version: number; updatedAt: string } | null;
+  contractsCount: number;
+}
+
+export interface TemplateVersionInfo {
+  version: number;
+  status: TemplateVersionStatus;
+  updatedAt: string;
+  updatedBy: string | null;
+  publishedAt: string | null;
+  publishedBy: string | null;
+}
+
+/** Modèle ouvert dans l'éditeur (GET /api/admin/contract-templates/:id). */
+export interface ContractTemplateDetail extends ContractTemplateSummary {
+  versions: TemplateVersionInfo[];
+  draftBody: string | null;
+  publishedBody: string | null;
+}
+
+// ---------------------------------------------------------------- Contrats générés
+
+/** BROUILLON (texte ajustable) → EMIS (numéroté, PDF figé) → ENVOYE → SIGNE ; ANNULE à tout moment avant signature. */
+export type ContractStatus = 'BROUILLON' | 'EMIS' | 'ENVOYE' | 'SIGNE' | 'ANNULE';
+
+export const CONTRACT_STATUS_LABELS: Record<ContractStatus, string> = {
+  BROUILLON: 'Brouillon',
+  EMIS: 'Émis',
+  ENVOYE: 'Envoyé',
+  SIGNE: 'Signé',
+  ANNULE: 'Annulé',
+};
+
+export type ContractEventAction = 'CREATION' | 'MODIFICATION' | 'EMISSION' | 'ENVOI' | 'SIGNATURE' | 'ANNULATION';
+
+export interface ContractSummary {
+  id: string;
+  number: string | null;
+  status: ContractStatus;
+  mission: { id: string; label: string };
+  client: string;
+  consultant: string;
+  template: { id: string; name: string; version: number };
+  createdAt: string;
+  issuedAt: string | null;
+  sentAt: string | null;
+  /** Date de signature (YYYY-MM-DD) saisie au dépôt du PDF signé. */
+  signedOn: string | null;
+  updatedAt: string;
+}
+
+export interface ContractEvent {
+  action: ContractEventAction;
+  actor: string;
+  comment: string | null;
+  createdAt: string;
+}
+
+/** Contrat ouvert (GET /api/admin/contracts/:id). */
+export interface ContractDetail extends ContractSummary {
+  /**
+   * Texte source : modèle + ajustements, variables comprises. Les valeurs sont celles de `data`
+   * (calculées à l'instant pour un brouillon, figées à l'émission ensuite).
+   */
+  body: string;
+  /** Texte de la version du modèle, pour mesurer les ajustements. */
+  templateBody: string;
+  data: Record<string, string | boolean | null>;
+  /** Variables vides : l'émission est impossible tant que la liste n'est pas vide. */
+  missing: string[];
+  pdfSha256: string | null;
+  signedPdfSha256: string | null;
+  cancelReason: string | null;
+  events: ContractEvent[];
+}

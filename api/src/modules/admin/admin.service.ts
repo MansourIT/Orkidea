@@ -206,6 +206,10 @@ interface MissionDbRow {
   holiday_policy: Mission['holidayPolicy'];
   worked_holidays: string | null;
   holiday_region: Mission['holidayRegion'];
+  purpose: string | null;
+  location: string | null;
+  terms: string | null;
+  payment_terms_days: number | null;
 }
 
 export async function listMissions(db: D1Database, id?: string): Promise<Mission[]> {
@@ -233,6 +237,10 @@ export async function listMissions(db: D1Database, id?: string): Promise<Mission
     clientValidation: !!m.client_validation,
     validatorName: m.validator_name,
     validatorEmail: m.validator_email,
+    purpose: m.purpose,
+    location: m.location,
+    terms: m.terms,
+    paymentTermsDays: m.payment_terms_days,
     active: !!m.active,
     weekendPolicy: m.weekend_policy,
     holidayPolicy: m.holiday_policy,

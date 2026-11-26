@@ -1,9 +1,11 @@
-import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
+import { DIALOG_DATA, Dialog, DialogRef } from '@angular/cdk/dialog';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { NgIcon } from '@ng-icons/core';
 import type { AdminUser, Client, Mission } from '@shared/types';
 import type { AppSettings } from '@shared/settings';
 import { Api, apiError } from '../../core/api';
+import { ContractList, openGenerateContract } from '../contracts/contract-list';
 import { MissionForm } from './mission-form';
 
 export interface MissionDrawerData {
@@ -16,7 +18,7 @@ export interface MissionDrawerData {
 /** Panneau latéral de création / modification d'une mission. Se ferme avec `true` si une mission a changé. */
 @Component({
   selector: 'app-mission-drawer',
-  imports: [NgIcon, MissionForm],
+  imports: [NgIcon, MissionForm, ContractList],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <aside class="flex h-dvh w-[min(100vw,42rem)] flex-col bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="mission-drawer-titre">
@@ -29,6 +31,15 @@ export interface MissionDrawerData {
         <button type="button" class="btn-ghost p-2" (click)="ref.close(changed)" aria-label="Fermer"><ng-icon name="lucideX" size="18" /></button>
       </header>
       @if (error()) { <p class="alert-error mx-5 mt-4" role="alert">{{ error() }}</p> }
+      @if (mission(); as m) {
+        <section class="border-b border-slate-200 bg-slate-50/60 px-5 py-3" aria-labelledby="mission-contrats-titre">
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <h3 id="mission-contrats-titre" class="text-sm font-semibold">Contrats de prestation</h3>
+            <button type="button" class="btn-secondary px-3 py-1 text-xs" (click)="generate(m.id)" [disabled]="!m.active"><ng-icon name="lucideFileText" size="14" aria-hidden="true" /> Générer un contrat</button>
+          </div>
+          <app-contract-list [missionId]="m.id" [compact]="true" />
+        </section>
+      }
       <div class="flex-1 overflow-y-auto">
         @for (m of [mission()]; track version()) {
           <app-mission-form [mission]="m" [consultants]="data.consultants" [clients]="data.clients" [settings]="data.settings"
@@ -42,6 +53,8 @@ export class MissionDrawer {
   protected readonly data = inject<MissionDrawerData>(DIALOG_DATA);
   protected readonly ref = inject<DialogRef<boolean>>(DialogRef);
   private readonly api = inject(Api);
+  private readonly dialog = inject(Dialog);
+  private readonly router = inject(Router);
 
   protected readonly mission = signal<Mission | null>(this.data.mission);
   /** Incrémenté pour recréer le formulaire avec la mission rechargée. */
@@ -59,5 +72,11 @@ export class MissionDrawer {
     } catch (err) {
       this.error.set(apiError(err).error);
     }
+  }
+
+  /** Ferme le panneau puis ouvre la génération du contrat de cette mission. */
+  generate(missionId: string): void {
+    this.ref.close(this.changed);
+    openGenerateContract(this.dialog, this.router, { missionId });
   }
 }

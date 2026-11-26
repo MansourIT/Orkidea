@@ -9,8 +9,8 @@ export function randomToken(): string {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** On ne stocke jamais un jeton en clair : uniquement son empreinte SHA-256. */
-export async function sha256(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+/** Empreinte SHA-256 (hexadécimal) : jetons (jamais stockés en clair), fichiers PDF. */
+export async function sha256(value: string | Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', typeof value === 'string' ? new TextEncoder().encode(value) : value);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }

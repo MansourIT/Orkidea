@@ -18,6 +18,7 @@ const inDays = (n: number) => new Date(new Date(`${today}T00:00:00Z`).getTime() 
 const mission = (p: Partial<Mission>): Mission => ({
   id: 'm', consultantId: 'u-jd', consultant: 'Jean Dupont', clientId: 'c1', client: 'Client Alpha', label: 'Mission', startDate: '2026-01-01', endDate: null,
   tjm: 500, clientValidation: false, validatorName: null, validatorEmail: null, active: true, weekendPolicy: null, holidayPolicy: null, workedHolidays: null, holidayRegion: null,
+  purpose: null, location: null, terms: null, paymentTermsDays: null,
   activities: [{ id: 'a', label: 'Développement', color: '#3B82F6', active: true }], ...p,
 });
 
@@ -107,7 +108,10 @@ describe('Admin : missions', () => {
     const { f, el } = await render();
     (el.querySelector('tbody tr') as HTMLElement).click();
     await f.whenStable();
+    http.expectOne('/api/admin/contracts?missionId=m1').flush([]);
+    await f.whenStable();
     const drawer = document.querySelector('aside[role="dialog"]') as HTMLElement;
+    await vi.waitFor(() => expect(drawer.textContent).toContain('Aucun contrat pour cette mission.'));
     expect(drawer.querySelector('h2')!.textContent).toContain('Projet Alpha');
     for (const s of ['Contrat', 'Validation client', 'Activités', 'Jours non ouvrés']) expect(drawer.textContent).toContain(s);
     expect(drawer.textContent).toContain('Résultat pour cette mission : week-ends interdits, jours fériés interdits, calendrier Métropole.');
