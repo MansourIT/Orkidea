@@ -108,7 +108,10 @@ describe('Admin : missions', () => {
     const { f, el } = await render();
     (el.querySelector('tbody tr') as HTMLElement).click();
     await f.whenStable();
+    http.expectOne('/api/admin/contracts?missionId=m1').flush([]);
+    await f.whenStable();
     const drawer = document.querySelector('aside[role="dialog"]') as HTMLElement;
+    await vi.waitFor(() => expect(drawer.textContent).toContain('Aucun contrat pour cette mission.'));
     expect(drawer.querySelector('h2')!.textContent).toContain('Projet Alpha');
     for (const s of ['Contrat', 'Validation client', 'Activités', 'Jours non ouvrés']) expect(drawer.textContent).toContain(s);
     expect(drawer.textContent).toContain('Résultat pour cette mission : week-ends interdits, jours fériés interdits, calendrier Métropole.');
