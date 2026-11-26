@@ -155,3 +155,58 @@ describe('Contrats de prestation', () => {
     expect((await call(`/api/admin/contracts/${c.id}/cancel`, { method: 'POST', cookie: admin, body: { reason: 'x' } })).status).toBe(409);
   });
 });
+
+describe('Suivi des contrats : envoi et signature', () => {
+  const signed = new TextEncoder().encode('%PDF-1.7\n% contrat signé scanné\n%%EOF');
+  const upload = (admin: string, id: string, signedOn: string, data = signed, type = 'application/pdf') =>
+    call(`/api/admin/contracts/${id}/signed?signedOn=${signedOn}`, { method: 'PUT', cookie: admin, raw: { data, type } });
+
+  it('émis → envoyé → signé avec dépôt du PDF ; remplacement tracé', async () => {
+    const admin = await login(ADMIN);
+    const c = await draft(admin, await setup(admin));
+    expect((await call(`/api/admin/contracts/${c.id}/sent`, { method: 'POST', cookie: admin })).status).toBe(409);
+    const issued = await json<ContractDetail>(await issue(admin, c));
+
+    const sent = await json<ContractDetail>(await call(`/api/admin/contracts/${issued.id}/sent`, { method: 'POST', cookie: admin, body: { comment: 'Envoyé à Sophie Bernard' } }));
+    expect(sent).toMatchObject({ status: 'ENVOYE' });
+    expect(sent.sentAt).not.toBeNull();
+    expect(sent.events[0]).toMatchObject({ action: 'ENVOI', comment: 'Envoyé à Sophie Bernard' });
+    expect((await call(`/api/admin/contracts/${issued.id}/sent`, { method: 'POST', cookie: admin })).status).toBe(409);
+
+    // Contrôles du dépôt : type, contenu, dates.
+    expect((await upload(admin, issued.id, '2026-11-27', signed, 'image/png')).status).toBe(415);
+    expect((await upload(admin, issued.id, '2026-11-27', new TextEncoder().encode('pas un pdf'))).status).toBe(400);
+    expect((await upload(admin, issued.id, '2026-11-26')).status).toBe(400); // avant l'émission
+    expect((await upload(admin, issued.id, '2026-11-28')).status).toBe(400); // dans le futur
+    expect((await call(`/api/admin/contracts/${issued.id}/signed.pdf`, { cookie: admin })).status).toBe(404);
+
+    const res = await upload(admin, issued.id, '2026-11-27');
+    expect(res.status).toBe(200);
+    const s = await json<ContractDetail>(res);
+    expect(s).toMatchObject({ status: 'SIGNE', signedOn: '2026-11-27' });
+    expect(s.signedPdfSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(s.events[0]).toMatchObject({ action: 'SIGNATURE', comment: 'Signé le 2026-11-27' });
+    const file = await call(`/api/admin/contracts/${issued.id}/signed.pdf`, { cookie: admin });
+    expect(file.headers.get('content-disposition')).toContain('CS-2026-001-signe.pdf');
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(signed);
+
+    // Signé : plus d'annulation ; remplacement du fichier possible.
+    expect((await call(`/api/admin/contracts/${issued.id}/cancel`, { method: 'POST', cookie: admin, body: { reason: 'x' } })).status).toBe(409);
+    const replaced = await json<ContractDetail>(await upload(admin, issued.id, '2026-11-27', new TextEncoder().encode('%PDF-1.7 v2')));
+    expect(replaced.events[0].comment).toMatch(/remplacé/);
+
+    const list = await json<ContractSummary[]>(await call('/api/admin/contracts', { cookie: admin }));
+    expect(list[0]).toMatchObject({ status: 'SIGNE', signedOn: '2026-11-27' });
+  });
+
+  it('signature directe d’un contrat émis (sans passer par « envoyé ») ; brouillon refusé', async () => {
+    const admin = await login(ADMIN);
+    const templateId = await setup(admin);
+    const c = await draft(admin, templateId);
+    expect((await upload(admin, c.id, '2026-11-27')).status).toBe(409);
+    await issue(admin, c);
+    const s = await json<ContractDetail>(await upload(admin, c.id, '2026-11-27'));
+    expect(s.status).toBe('SIGNE');
+    expect(s.sentAt).not.toBeNull();
+  });
+});

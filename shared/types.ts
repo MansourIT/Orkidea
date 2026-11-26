@@ -266,6 +266,9 @@ export interface ContractSummary {
   template: { id: string; name: string; version: number };
   createdAt: string;
   issuedAt: string | null;
+  sentAt: string | null;
+  /** Date de signature (YYYY-MM-DD) saisie au dépôt du PDF signé. */
+  signedOn: string | null;
   updatedAt: string;
 }
 
@@ -289,6 +292,7 @@ export interface ContractDetail extends ContractSummary {
   /** Variables vides : l'émission est impossible tant que la liste n'est pas vide. */
   missing: string[];
   pdfSha256: string | null;
+  signedPdfSha256: string | null;
   cancelReason: string | null;
   events: ContractEvent[];
 }

@@ -1,5 +1,6 @@
 import { createRoute } from '@hono/zod-openapi';
-import { IdSchema, jsonBody, newRouter, ok, z } from '../../core/router';
+import { fail } from '../../core/errors';
+import { DateSchema, IdSchema, jsonBody, newRouter, ok, z } from '../../core/router';
 import { requireAdmin, requireUser } from '../auth/auth.middleware';
 import * as svc from './contracts.service';
 
@@ -113,5 +114,52 @@ contractRoutes.openapi(
   async (c) => {
     const pdf = await svc.draftPdf(c.env.DB, c.req.valid('param').id);
     return new Response(pdf, { headers: { 'content-type': 'application/pdf', 'content-disposition': 'inline; filename="brouillon.pdf"', 'cache-control': 'private, no-store' } });
+  },
+);
+
+contractRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/{id}/sent',
+    tags: ['Contrats'],
+    summary: 'Contrat transmis au client (émis → envoyé)',
+    request: { params: IdParam, body: { required: false, content: { 'application/json': { schema: z.object({ comment: z.string().max(500).optional() }) } } } },
+    responses: { 200: ok('Envoyé'), 409: ok('Pas émis, ou déjà envoyé') },
+  }),
+  async (c) => {
+    const { id } = c.req.valid('param');
+    const body = (await c.req.json().catch(() => ({}))) as { comment?: unknown };
+    const comment = typeof body.comment === 'string' && body.comment.trim() ? body.comment.trim().slice(0, 500) : null;
+    await svc.markSent(c.env.DB, c.get('user').id, id, comment);
+    return c.json(await svc.getContract(c.env.DB, id), 200);
+  },
+);
+
+/** Dépôt du PDF signé : corps brut application/pdf, date de signature en paramètre (?signedOn=YYYY-MM-DD). */
+contractRoutes.openapi(
+  createRoute({
+    method: 'put',
+    path: '/{id}/signed',
+    tags: ['Contrats'],
+    summary: 'Dépôt (ou remplacement) du PDF signé',
+    request: { params: IdParam, query: z.object({ signedOn: DateSchema }) },
+    responses: { 200: ok('Signé'), 400: ok('Fichier ou date invalide'), 409: ok('Contrat non émis'), 413: ok('Fichier trop volumineux') },
+  }),
+  async (c) => {
+    const { id } = c.req.valid('param');
+    if (!(c.req.header('content-type') ?? '').startsWith('application/pdf')) throw fail(415, 'Envoyez un fichier PDF');
+    const length = Number(c.req.header('content-length') ?? 0);
+    if (length > svc.MAX_SIGNED_PDF) throw fail(413, 'Fichier trop volumineux (10 Mo au plus)');
+    const pdf = new Uint8Array(await c.req.arrayBuffer());
+    await svc.uploadSigned(c.env.DB, c.env.CONTRACTS, c.get('user').id, id, pdf, c.req.valid('query').signedOn);
+    return c.json(await svc.getContract(c.env.DB, id), 200);
+  },
+);
+
+contractRoutes.openapi(
+  createRoute({ method: 'get', path: '/{id}/signed.pdf', tags: ['Contrats'], summary: 'PDF signé déposé', request: { params: IdParam }, responses: { ...pdfResponse, 404: ok('Aucun PDF signé') } }),
+  async (c) => {
+    const { body, filename } = await svc.signedPdf(c.env.DB, c.env.CONTRACTS, c.req.valid('param').id);
+    return new Response(body, { headers: { 'content-type': 'application/pdf', 'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'private, no-store' } });
   },
 );

@@ -30,6 +30,10 @@ interface ContractRow {
   cancel_reason: string | null;
   created_at: string;
   issued_at: string | null;
+  sent_at: string | null;
+  signed_on: string | null;
+  signed_pdf_key: string | null;
+  signed_pdf_sha256: string | null;
   updated_at: string;
 }
 
@@ -50,6 +54,8 @@ const toSummary = (r: ContractRow): ContractSummary => ({
   template: { id: r.template_id, name: r.template_name, version: r.template_version },
   createdAt: r.created_at,
   issuedAt: r.issued_at,
+  sentAt: r.sent_at,
+  signedOn: r.signed_on,
   updatedAt: r.updated_at,
 });
 
@@ -108,6 +114,7 @@ export async function getContract(db: D1Database, id: string): Promise<ContractD
     data,
     missing: r.status === 'BROUILLON' ? renderTemplate(parseTemplate(r.body), data).missing : [],
     pdfSha256: r.pdf_sha256,
+    signedPdfSha256: r.signed_pdf_sha256,
     cancelReason: r.cancel_reason,
     events,
   };
@@ -252,4 +259,51 @@ export async function cancelContract(db: D1Database, userId: string, id: string,
 export async function resetBody(db: D1Database, userId: string, id: string): Promise<void> {
   const r = await requireRow(db, id);
   await saveBody(db, userId, id, r.template_body, r.updated_at);
+}
+
+/** Contrat transmis au client (par l'administrateur lui-même) : EMIS → ENVOYE. */
+export async function markSent(db: D1Database, userId: string, id: string, comment: string | null): Promise<void> {
+  const r = await requireRow(db, id);
+  if (r.status !== 'EMIS') throw fail(409, r.status === 'BROUILLON' ? 'Émettez le contrat avant de l’envoyer' : 'Ce contrat a déjà été envoyé, signé ou annulé');
+  const now = nowIso();
+  const [res] = await db.batch([
+    db.prepare(`UPDATE contracts SET status = 'ENVOYE', sent_at = ?, updated_at = ? WHERE id = ? AND status = 'EMIS'`).bind(now, now, id),
+    db.prepare(`INSERT INTO contract_events (id, contract_id, action, actor, comment, created_at) SELECT ?, ?, 'ENVOI', ?, ?, ? WHERE changes() > 0`).bind(newId(), id, userId, comment, now),
+  ]);
+  if (!res.meta.changes) throw fail(409, 'Le contrat a changé entre-temps. Rechargez la page.');
+}
+
+/** 10 Mo : un contrat scanné de plusieurs dizaines de pages. */
+export const MAX_SIGNED_PDF = 10 * 1024 * 1024;
+
+/**
+ * Dépôt du PDF signé (contrat émis ou envoyé → SIGNE). Un nouveau dépôt sur un contrat signé remplace le fichier
+ * (erreur de document) ; l'historique en garde la trace.
+ */
+export async function uploadSigned(db: D1Database, bucket: R2Bucket, userId: string, id: string, pdf: Uint8Array, signedOn: string): Promise<void> {
+  const r = await requireRow(db, id);
+  if (!['EMIS', 'ENVOYE', 'SIGNE'].includes(r.status) || !r.number) throw fail(409, 'Seul un contrat émis peut recevoir sa version signée');
+  if (pdf.length > MAX_SIGNED_PDF) throw fail(413, 'Fichier trop volumineux (10 Mo au plus)');
+  if (new TextDecoder().decode(pdf.slice(0, 5)) !== '%PDF-') throw fail(400, 'Le fichier n’est pas un PDF');
+  if (r.issued_at && signedOn < r.issued_at.slice(0, 10)) throw fail(400, 'La date de signature est antérieure à l’émission du contrat');
+  if (signedOn > todayInParis()) throw fail(400, 'La date de signature ne peut pas être dans le futur');
+  const hash = await sha256(pdf);
+  const key = `contrats/${id}/${r.number}-signe.pdf`;
+  await bucket.put(key, pdf, { httpMetadata: { contentType: 'application/pdf' }, sha256: hash, customMetadata: { number: r.number, signedOn } });
+  const now = nowIso();
+  const replacing = r.status === 'SIGNE';
+  await db.batch([
+    db
+      .prepare(`UPDATE contracts SET status = 'SIGNE', signed_pdf_key = ?, signed_pdf_sha256 = ?, signed_on = ?, sent_at = COALESCE(sent_at, ?), updated_at = ? WHERE id = ?`)
+      .bind(key, hash, signedOn, now, now, id),
+    eventStmt(db, id, 'SIGNATURE', userId, replacing ? `PDF signé remplacé (signé le ${signedOn})` : `Signé le ${signedOn}`),
+  ]);
+}
+
+export async function signedPdf(db: D1Database, bucket: R2Bucket, id: string): Promise<{ body: ReadableStream; filename: string }> {
+  const r = await requireRow(db, id);
+  if (!r.signed_pdf_key) throw fail(404, 'Aucun PDF signé déposé pour ce contrat');
+  const object = await bucket.get(r.signed_pdf_key);
+  if (!object) throw fail(404, 'PDF signé introuvable dans le stockage');
+  return { body: object.body, filename: `${r.number}-signe.pdf` };
 }

@@ -8,6 +8,8 @@ export const BASE = 'http://localhost';
 export interface CallOptions {
   method?: string;
   body?: unknown;
+  /** Corps brut (fichier) et son type, au lieu d'un corps JSON. */
+  raw?: { data: Uint8Array; type: string };
   cookie?: string;
   origin?: string;
   /** IP cliente (limiteur de débit) ; aléatoire par défaut pour ne pas mélanger les tests. */
@@ -19,13 +21,14 @@ export interface CallOptions {
 export async function call(path: string, opts: CallOptions = {}): Promise<Response> {
   const headers = new Headers();
   if (opts.body !== undefined) headers.set('content-type', 'application/json');
+  if (opts.raw) headers.set('content-type', opts.raw.type);
   if (opts.cookie) headers.set('cookie', opts.cookie);
   if (opts.origin) headers.set('origin', opts.origin);
   headers.set('cf-connecting-ip', opts.ip ?? `10.0.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`);
   const req = new Request(`${opts.base ?? BASE}${path}`, {
     method: opts.method ?? 'GET',
     headers,
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    body: opts.raw ? opts.raw.data : opts.body === undefined ? undefined : JSON.stringify(opts.body),
     redirect: 'manual',
   });
   const ctx = createExecutionContext();
