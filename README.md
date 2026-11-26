@@ -114,6 +114,17 @@ npx wrangler d1 create orkidea-cra --jurisdiction eu
 
 Copier le `database_id` renvoyé dans `api/wrangler.jsonc` (à la place des zéros), committer sur `main`. La juridiction est **définitive** : la base ne pourra pas quitter l'UE.
 
+### 2 bis. Bucket R2 des contrats (juridiction UE)
+
+Les PDF des contrats de prestation sont stockés dans un bucket R2 privé. R2 s'active une fois dans le tableau de bord Cloudflare (R2 Object Storage ; l'offre gratuite suffit), puis :
+
+```bash
+cd api
+npx wrangler r2 bucket create orkidea-contrats --jurisdiction eu
+```
+
+Le nom et la juridiction correspondent au binding `CONTRACTS` de `api/wrangler.jsonc`. Sans ce bucket, `wrangler deploy` échoue. Le bucket n'est jamais public : les PDF ne sont servis que par l'API, aux administrateurs.
+
 ### 3. Brevo (emails)
 
 1. Compte Brevo (hébergé dans l'UE), puis **authentifier le domaine `orkidea.fr`** (Expéditeurs, domaines → SPF, DKIM, DMARC dans le DNS Cloudflare). Sans cela, les liens de connexion et de validation finiront en indésirables chez les clients.
