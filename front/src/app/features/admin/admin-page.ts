@@ -4,25 +4,27 @@ import type { HasUnsavedChanges } from '../../core/unsaved-changes.guard';
 import { Confirm } from '../../ui/confirm-dialog';
 import { type Tab, Tabs } from '../../ui/tabs';
 import { AdminClients } from './admin-clients';
+import { AdminContracts } from './admin-contracts';
 import { AdminMissions } from './admin-missions';
 import { AdminSettings } from './admin-settings';
 import { AdminTimesheets } from './admin-timesheets';
 import { AdminUsers } from './admin-users';
 
-type TabId = 'cra' | 'consultants' | 'clients' | 'missions' | 'parametres';
+type TabId = 'cra' | 'consultants' | 'clients' | 'missions' | 'contrats' | 'parametres';
 
 const TABS: Tab<TabId>[] = [
   { id: 'cra', label: 'CRA du mois', icon: 'lucideCalendarDays' },
   { id: 'consultants', label: 'Consultants', icon: 'lucideUsers' },
   { id: 'clients', label: 'Clients', icon: 'lucideBuilding2' },
   { id: 'missions', label: 'Missions', icon: 'lucideBriefcase' },
+  { id: 'contrats', label: 'Contrats', icon: 'lucideFileText' },
   { id: 'parametres', label: 'Paramètres', icon: 'lucideSettings' },
 ];
 
 /** Back-office Orkidea. L'onglet est dans l'URL (?onglet=…) pour pouvoir le partager / y revenir. */
 @Component({
   selector: 'app-admin-page',
-  imports: [Tabs, AdminTimesheets, AdminUsers, AdminClients, AdminMissions, AdminSettings],
+  imports: [Tabs, AdminTimesheets, AdminUsers, AdminClients, AdminMissions, AdminContracts, AdminSettings],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 class="text-2xl font-bold sm:text-3xl">Administration</h1>
@@ -33,6 +35,7 @@ const TABS: Tab<TabId>[] = [
         @case ('consultants') { <app-admin-users /> }
         @case ('clients') { <app-admin-clients /> }
         @case ('missions') { <app-admin-missions /> }
+        @case ('contrats') { <app-admin-contracts /> }
         @case ('parametres') { <app-admin-settings /> }
       }
     </div>

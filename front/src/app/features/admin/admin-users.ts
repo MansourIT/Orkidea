@@ -4,6 +4,7 @@ import { NgIcon } from '@ng-icons/core';
 import type { AdminUser } from '@shared/types';
 import { Api, apiError } from '../../core/api';
 import { AuthStore } from '../../core/auth.store';
+import { Confirm } from '../../ui/confirm-dialog';
 
 /** Utilisateurs : consultants et administrateurs (création, rôle, activation). */
 @Component({
@@ -25,15 +26,21 @@ import { AuthStore } from '../../core/auth.store';
     @if (error()) { <div class="alert-error mt-4" role="alert">{{ error() }}</div> }
 
     <div class="card mt-4 overflow-x-auto">
-      <table class="w-full min-w-[40rem] text-sm">
+      <table class="w-full min-w-[48rem] text-sm">
         <thead class="bg-slate-50 text-left text-xs text-ink-soft">
-          <tr><th scope="col" class="px-4 py-3 font-medium">Nom</th><th scope="col" class="px-4 py-3 font-medium">Email</th><th scope="col" class="px-4 py-3 font-medium">Rôle</th><th scope="col" class="px-4 py-3 font-medium">Statut</th><th scope="col" class="px-4 py-3"><span class="sr-only">Actions</span></th></tr>
+          <tr><th scope="col" class="px-4 py-3 font-medium">Nom</th><th scope="col" class="px-4 py-3 font-medium">Email</th><th scope="col" class="px-4 py-3 font-medium">Qualification</th><th scope="col" class="px-4 py-3 font-medium">Rôle</th><th scope="col" class="px-4 py-3 font-medium">Statut</th><th scope="col" class="px-4 py-3"><span class="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           @for (u of users(); track u.id) {
             <tr class="border-t border-slate-100" [class.opacity-60]="!u.active">
               <td class="px-4 py-3 font-medium text-ink">{{ u.name }}</td>
               <td class="px-4 py-3 text-ink-soft">{{ u.email }}</td>
+              <td class="px-4 py-3">
+                <button type="button" class="group inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-left hover:bg-slate-100" (click)="editQualification(u)" [attr.aria-label]="'Qualification de ' + u.name + ' : ' + (u.qualification ?? 'non renseignée')">
+                  @if (u.qualification) { <span>{{ u.qualification }}</span> } @else { <span class="text-ink-soft">À renseigner</span> }
+                  <ng-icon name="lucidePencil" size="12" class="text-ink-soft opacity-0 group-hover:opacity-100" aria-hidden="true" />
+                </button>
+              </td>
               <td class="px-4 py-3">
                 <select class="input w-36 py-1" [value]="u.role" (change)="update(u, { role: $any($event.target).value })" [disabled]="u.id === me()" [attr.aria-label]="'Rôle de ' + u.name">
                   <option value="consultant">Consultant</option><option value="admin">Admin</option>
@@ -55,6 +62,7 @@ import { AuthStore } from '../../core/auth.store';
 export class AdminUsers implements OnInit {
   private readonly api = inject(Api);
   private readonly auth = inject(AuthStore);
+  private readonly confirm = inject(Confirm);
   protected readonly me = () => this.auth.user()?.id;
   protected readonly users = signal<AdminUser[]>([]);
   protected readonly error = signal<string | null>(null);
@@ -96,7 +104,19 @@ export class AdminUsers implements OnInit {
     }
   }
 
-  async update(u: AdminUser, patch: Partial<Pick<AdminUser, 'role' | 'active'>>): Promise<void> {
+  /** Qualification reprise dans les contrats de prestation (ex. « Architecte logiciel »). */
+  async editQualification(u: AdminUser): Promise<void> {
+    const value = await this.confirm.prompt({
+      title: 'Qualification',
+      message: `${u.name} — mention reprise dans les contrats de prestation.`,
+      confirmLabel: 'Enregistrer',
+      input: { label: 'Qualification', required: false, initial: u.qualification ?? '', multiline: false },
+    });
+    if (value === null || value === undefined || value.trim() === (u.qualification ?? '')) return;
+    await this.update(u, { qualification: value.trim() || null });
+  }
+
+  async update(u: AdminUser, patch: Partial<Pick<AdminUser, 'role' | 'active' | 'qualification'>>): Promise<void> {
     this.error.set(null);
     try {
       await this.api.updateUser(u.id, patch);

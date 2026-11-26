@@ -9,6 +9,7 @@ import type {
   ApiError,
   Client,
   ClientConfig,
+  ClientInput,
   Entry,
   Mission,
   PublicValidationView,
@@ -17,6 +18,7 @@ import type {
   TimesheetSummary,
   User,
 } from '@shared/types';
+import type { CompanySettings } from '@shared/company';
 import type { AppSettings, MissionCalendarOverrides } from '@shared/settings';
 
 /** Champs modifiables d'une mission (création et modification). */
@@ -28,6 +30,10 @@ export interface MissionInput extends MissionCalendarOverrides {
   clientValidation: boolean;
   validatorName: string | null;
   validatorEmail: string | null;
+  purpose: string | null;
+  location: string | null;
+  terms: string | null;
+  paymentTermsDays: number | null;
 }
 
 /** Client HTTP typé de l'API (même origine : cookie de session automatique). */
@@ -76,11 +82,11 @@ export class Api {
   exportUrl = (month: string) => `/api/admin/timesheets/export?month=${month}`;
   adminPdfUrl = (id: string) => `/api/admin/timesheets/${id}/pdf`;
   users = () => this.get<AdminUser[]>('/api/admin/users');
-  createUser = (body: { email: string; name: string; role: 'consultant' | 'admin' }) => this.send<{ id: string }>('POST', '/api/admin/users', body);
+  createUser = (body: { email: string; name: string; role: 'consultant' | 'admin'; qualification?: string | null }) => this.send<{ id: string }>('POST', '/api/admin/users', body);
   updateUser = (id: string, body: Partial<Omit<AdminUser, 'id'>>) => this.send<AdminUser>('PATCH', `/api/admin/users/${id}`, body);
   clients = () => this.get<Client[]>('/api/admin/clients');
-  createClient = (body: { name: string; siret?: string | null }) => this.send<{ id: string }>('POST', '/api/admin/clients', body);
-  updateClient = (id: string, body: { name?: string; siret?: string | null }) => this.send<Client>('PATCH', `/api/admin/clients/${id}`, body);
+  createClient = (body: ClientInput) => this.send<{ id: string }>('POST', '/api/admin/clients', body);
+  updateClient = (id: string, body: Partial<ClientInput>) => this.send<Client>('PATCH', `/api/admin/clients/${id}`, body);
   updateActivity = (id: string, body: { label?: string; color?: string; active?: boolean }) =>
     this.send<{ id: string; label: string; color: string; active: boolean }>('PATCH', `/api/admin/activities/${id}`, body);
   missions = () => this.get<Mission[]>('/api/admin/missions');
@@ -90,6 +96,8 @@ export class Api {
     this.send<Mission>('PATCH', `/api/admin/missions/${id}`, body);
   settings = () => this.get<AppSettings>('/api/admin/settings');
   saveSettings = (s: AppSettings) => this.send<AppSettings>('PUT', '/api/admin/settings', s);
+  company = () => this.get<CompanySettings>('/api/admin/company');
+  saveCompany = (c: CompanySettings) => this.send<CompanySettings>('PUT', '/api/admin/company', c);
 }
 
 /** Erreur API normalisée (message en français fourni par le serveur). */

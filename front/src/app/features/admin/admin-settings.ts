@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { NgIcon } from '@ng-icons/core';
 import { DEFAULT_SETTINGS, type AppSettings, type CalendarSettings, type Completeness, type DayPolicy, type SubmissionOpening, type SubmissionSettings } from '@shared/settings';
 import { WEEKDAY_NAMES, frDate, todayInParis } from '@shared/dates';
@@ -8,6 +8,7 @@ import { Confirm } from '../../ui/confirm-dialog';
 import { Segmented, type SegmentOption } from '../../ui/segmented';
 import { Stepper } from '../../ui/stepper';
 import { ToggleSwitch } from '../../ui/toggle-switch';
+import { CompanySettingsCard } from './company-settings';
 import { SettingsPreview } from './settings-preview';
 
 const POLICIES: SegmentOption<DayPolicy>[] = [
@@ -36,7 +37,7 @@ const same = (a: AppSettings, b: AppSettings) =>
 /** Paramétrage global : jours non ouvrés et règles de soumission, avec aperçu en direct. */
 @Component({
   selector: 'app-admin-settings',
-  imports: [NgIcon, Segmented, ToggleSwitch, Stepper, SettingsPreview],
+  imports: [NgIcon, Segmented, ToggleSwitch, Stepper, SettingsPreview, CompanySettingsCard],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
   template: `
@@ -204,6 +205,9 @@ const same = (a: AppSettings, b: AppSettings) =>
               </div>
             </div>
           </section>
+
+          <!-- ===================================================== Société (contrats) -->
+          <app-company-settings />
         </div>
 
         <aside class="lg:sticky lg:top-20">
@@ -238,6 +242,7 @@ const same = (a: AppSettings, b: AppSettings) =>
 export class AdminSettings implements OnInit {
   private readonly api = inject(Api);
   private readonly confirm = inject(Confirm);
+  private readonly company = viewChild(CompanySettingsCard);
 
   protected readonly policies = POLICIES;
   protected readonly regions = REGIONS;
@@ -324,10 +329,10 @@ export class AdminSettings implements OnInit {
 
   /** Utilisé par la page d'administration avant de changer d'onglet. */
   hasUnsavedChanges(): boolean {
-    return this.dirty();
+    return this.dirty() || !!this.company()?.dirty();
   }
 
   onBeforeUnload(e: BeforeUnloadEvent): void {
-    if (this.dirty()) e.preventDefault();
+    if (this.hasUnsavedChanges()) e.preventDefault();
   }
 }

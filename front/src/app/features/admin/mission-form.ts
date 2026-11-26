@@ -192,6 +192,34 @@ const REGION_OPTIONS: SegmentOption<Inherit<HolidayRegion>>[] = [
             </p>
           </div>
         </section>
+
+        <!-- 5. Contrat de prestation -->
+        <section aria-labelledby="sec-prestation">
+          <h3 id="sec-prestation" class="section-title"><span class="section-num">5</span> Contrat de prestation</h3>
+          <p class="mb-3 text-xs text-ink-soft">Repris dans le contrat de prestation envoyé au client.</p>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div class="sm:col-span-2">
+              <label for="m-purpose" class="label">Objet de la prestation</label>
+              <textarea id="m-purpose" class="input min-h-20" formControlName="purpose" maxlength="2000" placeholder="Ex. : Refonte de la plateforme de paiement"></textarea>
+            </div>
+            <div class="sm:col-span-2">
+              <label for="m-location" class="label">Lieu d’exécution</label>
+              <input id="m-location" class="input" formControlName="location" maxlength="200" placeholder="Ex. : Paris, 2 jours de télétravail par semaine" />
+            </div>
+            <div class="sm:col-span-2">
+              <label for="m-terms" class="label">Modalités d’exécution <span class="font-normal text-ink-soft">(facultatif)</span></label>
+              <textarea id="m-terms" class="input min-h-20" formControlName="terms" maxlength="2000" placeholder="Ex. : régie, horaires, astreintes, matériel fourni…"></textarea>
+            </div>
+            <div>
+              <label for="m-payment" class="label">Délai de paiement</label>
+              <div class="relative">
+                <input id="m-payment" type="number" min="0" max="60" step="1" class="input pr-14" formControlName="paymentTermsDays" [attr.aria-invalid]="showCtl('paymentTermsDays')" aria-describedby="m-payment-aide" />
+                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-soft">jours</span>
+              </div>
+              <p id="m-payment-aide" class="mt-1 text-xs" [class]="showCtl('paymentTermsDays') ? 'text-red-700' : 'text-ink-soft'">60 jours au plus après la date de facture.</p>
+            </div>
+          </div>
+        </section>
       </div>
 
       <footer class="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-3">
@@ -250,6 +278,10 @@ export class MissionForm implements OnInit {
       holidayPolicy: ['' as Inherit<DayPolicy>],
       holidayRegion: ['' as Inherit<HolidayRegion>],
       overrideWorkedHolidays: [false],
+      purpose: ['', Validators.maxLength(2000)],
+      location: ['', Validators.maxLength(200)],
+      terms: ['', Validators.maxLength(2000)],
+      paymentTermsDays: [null as number | null, [Validators.min(0), Validators.max(60)]],
     },
     { validators: missionRules },
   );
@@ -291,6 +323,10 @@ export class MissionForm implements OnInit {
         holidayPolicy: m.holidayPolicy ?? '',
         holidayRegion: m.holidayRegion ?? '',
         overrideWorkedHolidays: m.workedHolidays !== null,
+        purpose: m.purpose ?? '',
+        location: m.location ?? '',
+        terms: m.terms ?? '',
+        paymentTermsDays: m.paymentTermsDays,
       });
       this.worked.set(m.workedHolidays ?? []);
     } else {
@@ -304,7 +340,7 @@ export class MissionForm implements OnInit {
     return this.submitted() && !!this.form.errors?.[key];
   }
 
-  protected showCtl(name: 'consultantId' | 'clientId' | 'label' | 'startDate'): boolean {
+  protected showCtl(name: 'consultantId' | 'clientId' | 'label' | 'startDate' | 'paymentTermsDays'): boolean {
     return this.submitted() && this.form.controls[name].invalid;
   }
 
@@ -336,6 +372,10 @@ export class MissionForm implements OnInit {
       holidayPolicy: v.holidayPolicy || null,
       holidayRegion: v.holidayRegion || null,
       workedHolidays: v.overrideWorkedHolidays ? this.worked() : null,
+      purpose: v.purpose.trim() || null,
+      location: v.location.trim() || null,
+      terms: v.terms.trim() || null,
+      paymentTermsDays: v.paymentTermsDays === null || (v.paymentTermsDays as unknown) === '' ? null : Number(v.paymentTermsDays),
     };
   }
 

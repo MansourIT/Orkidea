@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { provideIcons } from '@ng-icons/core';
+import { DEFAULT_COMPANY } from '@shared/company';
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
 import { Confirm } from '../../ui/confirm-dialog';
 import { APP_ICONS } from '../../ui/icons';
@@ -31,6 +32,9 @@ describe('Paramètres', () => {
     const f = TestBed.createComponent(AdminSettings);
     f.detectChanges();
     http.expectOne('/api/admin/settings').flush(settings);
+    await tick();
+    await f.whenStable();
+    http.expectOne('/api/admin/company').flush(DEFAULT_COMPANY);
     await tick();
     await f.whenStable();
     return { f, el: f.nativeElement as HTMLElement };
@@ -125,6 +129,9 @@ describe('Paramètres', () => {
     http.expectOne('/api/admin/settings').flush(DEFAULT_SETTINGS);
     await tick();
     await f.whenStable();
+    http.expectOne('/api/admin/company').flush(DEFAULT_COMPANY);
+    await tick();
+    await f.whenStable();
     const el = f.nativeElement as HTMLElement;
     el.querySelector<HTMLButtonElement>('button[aria-label="Autoriser la soumission des mois futurs"]')!.click();
     await f.whenStable();
@@ -132,5 +139,32 @@ describe('Paramètres', () => {
     await f.componentInstance.select('missions');
     expect(ask).toHaveBeenCalled();
     expect(el.querySelector('[aria-selected="true"]')?.textContent).toContain('Paramètres');
+  });
+
+  it('fiche société : contrôle du SIRET, exemple de numéro, enregistrement séparé', async () => {
+    const { f, el } = await render();
+    expect(el.textContent).toContain('CS-');
+    const type = async (id: string, value: string) => {
+      const input = el.querySelector<HTMLInputElement>(`#co-${id}`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+      await f.whenStable();
+    };
+    await type('siret', '123');
+    expect(el.textContent).toContain('14 chiffres, sans espace');
+    const save = () => [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Enregistrer la fiche société'))!;
+    expect(save().disabled).toBe(true);
+    await type('siret', '98765432100019');
+    await type('contractNumberPrefix', 'orc');
+    expect(el.textContent).toContain('ORC-');
+    expect(f.componentInstance.hasUnsavedChanges()).toBe(true);
+    save().click();
+    const req = http.expectOne({ method: 'PUT', url: '/api/admin/company' });
+    expect(req.request.body).toMatchObject({ siret: '98765432100019', contractNumberPrefix: 'ORC', legalName: 'Orkidea' });
+    req.flush(req.request.body);
+    await tick();
+    await f.whenStable();
+    expect(f.componentInstance.hasUnsavedChanges()).toBe(false);
+    http.expectNone({ method: 'PUT', url: '/api/admin/settings' });
   });
 });
