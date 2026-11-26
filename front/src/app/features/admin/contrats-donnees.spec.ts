@@ -7,7 +7,7 @@ import { provideIcons } from '@ng-icons/core';
 import { DEFAULT_COMPANY } from '@shared/company';
 import type { Client, Mission } from '@shared/types';
 import { APP_ICONS } from '../../ui/icons';
-import { AdminContracts } from './admin-contracts';
+import { ContractReadiness } from './contract-readiness';
 import { ClientDrawer } from './client-drawer';
 import { MissionForm } from './mission-form';
 
@@ -92,7 +92,7 @@ describe('Données des contrats', () => {
 
   it('onglet Contrats : données manquantes par société, client et mission', async () => {
     setup();
-    const f = TestBed.createComponent(AdminContracts);
+    const f = TestBed.createComponent(ContractReadiness);
     await f.whenStable();
     http.expectOne('/api/admin/company').flush(DEFAULT_COMPANY);
     http.expectOne('/api/admin/clients').flush([CLIENT]);

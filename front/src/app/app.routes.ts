@@ -38,6 +38,13 @@ export const routes: Routes = [
         loadComponent: () => import('./features/timesheet/timesheet-page').then((m) => m.TimesheetPage),
       },
       { path: 'tableau-de-bord', title: T('Tableau de bord'), loadComponent: () => import('./features/dashboard/dashboard-page').then((m) => m.DashboardPage) },
+      {
+        path: 'admin/modeles/:id',
+        title: T('Modèle de contrat'),
+        canActivate: [adminGuard],
+        canDeactivate: [unsavedChangesGuard],
+        loadComponent: () => import('./features/contracts/template-editor-page').then((m) => m.TemplateEditorPage),
+      },
       { path: 'admin', title: T('Administration'), canActivate: [adminGuard], canDeactivate: [unsavedChangesGuard], loadComponent: () => import('./features/admin/admin-page').then((m) => m.AdminPage) },
     ],
   },

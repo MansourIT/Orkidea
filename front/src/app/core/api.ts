@@ -10,6 +10,8 @@ import type {
   Client,
   ClientConfig,
   ClientInput,
+  ContractTemplateDetail,
+  ContractTemplateSummary,
   Entry,
   Mission,
   PublicValidationView,
@@ -96,6 +98,18 @@ export class Api {
     this.send<Mission>('PATCH', `/api/admin/missions/${id}`, body);
   settings = () => this.get<AppSettings>('/api/admin/settings');
   saveSettings = (s: AppSettings) => this.send<AppSettings>('PUT', '/api/admin/settings', s);
+  // Modèles de contrat
+  templates = () => this.get<ContractTemplateSummary[]>('/api/admin/contract-templates');
+  template = (id: string) => this.get<ContractTemplateDetail>(`/api/admin/contract-templates/${id}`);
+  createTemplate = (body: { name: string; description?: string | null; body: string }) => this.send<{ id: string }>('POST', '/api/admin/contract-templates', body);
+  updateTemplate = (id: string, body: { name?: string; description?: string | null; archived?: boolean }) =>
+    this.send<ContractTemplateDetail>('PATCH', `/api/admin/contract-templates/${id}`, body);
+  saveTemplateDraft = (id: string, body: string, baseUpdatedAt: string | null) =>
+    this.send<ContractTemplateDetail>('PUT', `/api/admin/contract-templates/${id}/draft`, { body, baseUpdatedAt });
+  discardTemplateDraft = (id: string) => firstValueFrom(this.http.delete<ContractTemplateDetail>(`/api/admin/contract-templates/${id}/draft`));
+  publishTemplate = (id: string) => this.send<ContractTemplateDetail>('POST', `/api/admin/contract-templates/${id}/publish`);
+  templateVersion = (id: string, version: number) => this.get<{ version: number; body: string }>(`/api/admin/contract-templates/${id}/versions/${version}`);
+
   company = () => this.get<CompanySettings>('/api/admin/company');
   saveCompany = (c: CompanySettings) => this.send<CompanySettings>('PUT', '/api/admin/company', c);
 }

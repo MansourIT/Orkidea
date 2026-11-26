@@ -138,3 +138,27 @@ export function contractData(s: ContractSources): ContractData {
     'contrat.date': longDate(s.date),
   };
 }
+
+/** Données fictives pour l'aperçu d'un modèle quand aucune mission n'est choisie. */
+export function sampleContractData(date: string): ContractData {
+  return contractData({
+    company: {
+      legalName: 'Orkidea', legalForm: 'SASU', capital: '1 000 €', siret: '00000000000000', rcs: 'Paris 000 000 000', vatNumber: 'FR00000000000',
+      address: '1 avenue de l’Exemple', postalCode: '75008', city: 'Paris', representativeName: 'Camille Martin', representativeRole: 'Président',
+      financialGuarantee: 'Garantie financière n° 0000 souscrite auprès de la Banque Exemple', contractNumberPrefix: 'CS',
+    },
+    client: {
+      id: 'exemple', name: 'Société Exemple SA', siret: '11111111111111', address: '10 rue du Client', postalCode: '69002', city: 'Lyon',
+      representativeName: 'Dominique Durand', representativeRole: 'Directeur des achats', contractEmail: 'contrats@exemple.fr',
+    },
+    consultant: { name: 'Alex Consultant', email: 'alex@exemple.fr', qualification: 'Architecte logiciel' },
+    mission: {
+      id: 'exemple', consultantId: 'exemple', consultant: 'Alex Consultant', clientId: 'exemple', client: 'Société Exemple SA', label: 'Mission exemple',
+      startDate: date, endDate: null, tjm: 650, clientValidation: true, validatorName: 'Claude Valideur', validatorEmail: 'valideur@exemple.fr', active: true,
+      weekendPolicy: null, holidayPolicy: null, workedHolidays: null, holidayRegion: null,
+      purpose: 'Accompagnement à la refonte du système d’information', location: 'Lyon, deux jours de télétravail par semaine',
+      terms: null, paymentTermsDays: 30, activities: [],
+    },
+    date,
+  });
+}
