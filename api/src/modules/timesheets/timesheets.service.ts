@@ -10,6 +10,7 @@ import { newId, randomToken, sha256 } from '../../core/crypto';
 import { fail } from '../../core/errors';
 import type { Mail } from '../../core/mail';
 import { button, escapeHtml, layout } from '../../core/mail';
+import { checkOnCall, interventionMinutes } from '../../../../shared/astreintes';
 import { checkEntries } from './check-entries';
 import {
   getOrCreateTimesheet,
@@ -18,6 +19,8 @@ import {
   loadEntries,
   loadValidations,
   type TimesheetRow,
+  loadOnCall,
+  listOnCallMissions,
 } from './timesheets.repository';
 import { renderTimesheetPdf } from './timesheets.pdf';
 
@@ -49,13 +52,21 @@ function blockedReason(ctx: ServiceCtx, row: TimesheetRow): string | null {
 }
 
 export async function toTimesheet(ctx: ServiceCtx, row: TimesheetRow): Promise<Timesheet> {
-  const [entries, validations] = await Promise.all([loadEntries(ctx.db, row.id), loadValidations(ctx.db, row.id)]);
+  const [entries, validations, onCall, onCallMissions] = await Promise.all([
+    loadEntries(ctx.db, row.id),
+    loadValidations(ctx.db, row.id),
+    loadOnCall(ctx.db, row.id),
+    listOnCallMissions(ctx.db, row.consultant_id, row.id),
+  ]);
   const region = ctx.settings.calendar.holidayRegion;
   return {
     month: row.month,
     status: row.status,
     comment: row.comment,
     entries,
+    onCall: onCall.onCall,
+    interventions: onCall.interventions,
+    onCallMissions,
     validations,
     workingDays: workingDays(row.month, region),
     submittedAt: row.submitted_at,
@@ -83,6 +94,11 @@ export async function saveTimesheet(ctx: ServiceCtx, user: User, month: string, 
     throw fail(409, `Ce mois est trop ancien pour être modifié (au-delà de ${ctx.settings.submission.pastMonthsLimit} mois)`);
   }
   const errors = checkEntries(month, body.entries, await activitiesFor(ctx, user.id, row.id));
+  const withOnCall = body.onCall !== undefined || body.interventions !== undefined;
+  const current = withOnCall ? null : await loadOnCall(ctx.db, row.id);
+  const onCall = body.onCall ?? current?.onCall ?? [];
+  const interventions = body.interventions ?? current?.interventions ?? [];
+  if (withOnCall) errors.push(...checkOnCall(month, onCall, interventions, await listOnCallMissions(ctx.db, user.id, row.id)));
   if (errors.length) throw fail(422, 'Saisie invalide', { details: errors });
 
   // undefined = inchangé ; null ou "" = effacé.
@@ -92,6 +108,18 @@ export async function saveTimesheet(ctx: ServiceCtx, user: User, month: string, 
     ...body.entries.map((e) =>
       ctx.db.prepare('INSERT INTO entries (timesheet_id, date, activity_id, quantity) VALUES (?, ?, ?, ?)').bind(row.id, e.date, e.activityId, e.quantity),
     ),
+    ...(withOnCall
+      ? [
+          ctx.db.prepare('DELETE FROM on_call_days WHERE timesheet_id = ?').bind(row.id),
+          ctx.db.prepare('DELETE FROM interventions WHERE timesheet_id = ?').bind(row.id),
+          ...onCall.map((d) => ctx.db.prepare('INSERT INTO on_call_days (timesheet_id, mission_id, date) VALUES (?, ?, ?)').bind(row.id, d.missionId, d.date)),
+          ...interventions.map((i) =>
+            ctx.db
+              .prepare('INSERT INTO interventions (id, timesheet_id, mission_id, date, start_time, end_time, minutes, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+              .bind(newId(), row.id, i.missionId, i.date, i.start, i.end, interventionMinutes(i.start, i.end), i.reason?.trim() || null),
+          ),
+        ]
+      : []),
     ctx.db.prepare('UPDATE timesheets SET comment = ?, updated_at = ? WHERE id = ?').bind(comment, nowIso(), row.id),
   ]);
   return toTimesheet(ctx, { ...row, comment });
@@ -120,10 +148,11 @@ export function validationRequestMail(appUrl: string, consultant: string, month:
   };
 }
 
-export const MISSIONS_TO_VALIDATE_SQL = `SELECT DISTINCT m.id, m.label, m.validator_name, m.validator_email, cl.name AS client_name
-  FROM entries e JOIN activities a ON a.id = e.activity_id
-  JOIN missions m ON m.id = a.mission_id JOIN clients cl ON cl.id = m.client_id
-  WHERE e.timesheet_id = ? AND m.client_validation = 1`;
+export const MISSIONS_TO_VALIDATE_SQL = `SELECT m.id, m.label, m.validator_name, m.validator_email, cl.name AS client_name
+  FROM missions m JOIN clients cl ON cl.id = m.client_id
+  WHERE m.client_validation = 1 AND (
+    m.id IN (SELECT a.mission_id FROM entries e JOIN activities a ON a.id = e.activity_id WHERE e.timesheet_id = ?1)
+    OR m.id IN (SELECT mission_id FROM on_call_days WHERE timesheet_id = ?1))`;
 
 /**
  * Soumission. Pour chaque mission présente dans le CRA dont le contrat impose une validation client,
@@ -135,14 +164,17 @@ export async function submitTimesheet(ctx: ServiceCtx, user: User, month: string
   const db = ctx.db;
   const row = await getTimesheetRow(db, user.id, month);
   if (!row || !EDITABLE_STATUSES.includes(row.status)) throw fail(409, 'Ce CRA ne peut pas être soumis');
-  const entries = await loadEntries(db, row.id);
-  if (!entries.length) throw fail(422, 'Le CRA est vide');
+  const [entries, onCall] = await Promise.all([loadEntries(db, row.id), loadOnCall(db, row.id)]);
+  if (!entries.length && !onCall.onCall.length) throw fail(422, 'Le CRA est vide');
 
   const blocked = blockedReason(ctx, row);
   if (blocked) throw fail(422, blocked);
 
   // Les missions ou le paramétrage ont pu changer depuis l'enregistrement : on recontrôle tout.
-  const errors = checkEntries(month, entries, await activitiesFor(ctx, user.id, row.id));
+  const errors = [
+    ...checkEntries(month, entries, await activitiesFor(ctx, user.id, row.id)),
+    ...checkOnCall(month, onCall.onCall, onCall.interventions, await listOnCallMissions(db, user.id, row.id)),
+  ];
   if (errors.length) throw fail(422, 'Saisie invalide', { details: errors });
 
   if (ctx.settings.submission.completeness === 'BLOQUER') {
@@ -193,7 +225,7 @@ export async function submitTimesheet(ctx: ServiceCtx, user: User, month: string
 export async function timesheetPdf(ctx: ServiceCtx, consultant: { id: string; name: string }, row: TimesheetRow): Promise<Response> {
   const ts = await toTimesheet(ctx, row);
   const acts = await listActivities(ctx.db, consultant.id, ctx.settings, { timesheetId: row.id });
-  const pdf = await renderTimesheetPdf({ consultant: consultant.name, timesheet: ts, activities: acts });
+  const pdf = await renderTimesheetPdf({ consultant: consultant.name, timesheet: ts, activities: acts, region: ctx.settings.calendar.holidayRegion });
   const fileName = `CRA-${row.month}-${consultant.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_')}.pdf`;
   return new Response(pdf, {
     headers: { 'content-type': 'application/pdf', 'content-disposition': `attachment; filename="${fileName}"` },

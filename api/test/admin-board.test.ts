@@ -49,11 +49,11 @@ describe('Admin : CRA du mois', () => {
     const bytes = new Uint8Array(await res.arrayBuffer());
     expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]); // BOM UTF-8 : accents corrects à l'ouverture dans Excel
     const lines = new TextDecoder().decode(bytes).trim().split('\r\n');
-    expect(lines[0]).toBe('Mois;Consultant;Email;Statut;Soumis le;Type;Mission;Client;Activité;Jours;TJM (€ HT);Montant indicatif (€ HT)');
-    expect(lines).toContain('2026-11;Jean Dupont;jean.dupont@example.com;Validé;27/11/2026;Travail;Projet Alpha;Client Alpha;Développement;5;550;2750');
-    expect(lines).toContain('2026-11;Jean Dupont;jean.dupont@example.com;Validé;27/11/2026;Travail;Projet Beta;Client Beta;Documentation;0,5;500;250');
-    expect(lines).toContain('2026-11;Jean Dupont;jean.dupont@example.com;Validé;27/11/2026;Absence;;;Congés payés;0,5;;');
-    expect(lines).toContain('2026-11;Marie Lefèvre;marie.lefevre@example.com;Non commencé;;;;;;0;;');
+    expect(lines[0]).toBe('Mois;Consultant;Email;Statut;Soumis le;Type;Mission;Client;Activité;Jours;TJM (€ HT);Montant indicatif (€ HT);Interventions (h);dont nuit (h);dont week-end (h);dont férié (h)');
+    expect(lines).toContain('2026-11;Jean Dupont;jean.dupont@example.com;Validé;27/11/2026;Travail;Projet Alpha;Client Alpha;Développement;5;550;2750;;;;');
+    expect(lines).toContain('2026-11;Jean Dupont;jean.dupont@example.com;Validé;27/11/2026;Travail;Projet Beta;Client Beta;Documentation;0,5;500;250;;;;');
+    expect(lines).toContain('2026-11;Jean Dupont;jean.dupont@example.com;Validé;27/11/2026;Absence;;;Congés payés;0,5;;;;;;');
+    expect(lines).toContain('2026-11;Marie Lefèvre;marie.lefevre@example.com;Non commencé;;;;;;0;;;;;;');
   });
 
   it('clôture groupée des CRA validés, tracée dans l’historique', async () => {
