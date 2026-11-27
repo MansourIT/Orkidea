@@ -1,3 +1,4 @@
+import { activityCode } from '../../../../shared/activity-code';
 import type { Activity, Entry, TimesheetStatus, TimesheetSummary, ValidationSummary } from '../../../../shared/types';
 import type { AppSettings, DayPolicy, MissionCalendarOverrides } from '../../../../shared/settings';
 import type { HolidayCode, HolidayRegion } from '../../../../shared/holidays';
@@ -59,6 +60,7 @@ interface ActivityDbRow {
   missionLabel: string | null;
   clientName: string | null;
   label: string;
+  code: string | null;
   kind: Activity['kind'];
   color: string;
   startDate: string | null;
@@ -70,7 +72,7 @@ interface ActivityDbRow {
 }
 
 const ACTIVITY_SELECT = `SELECT a.id, a.mission_id AS missionId, m.label AS missionLabel, cl.name AS clientName,
-       a.label, a.kind, a.color, m.start_date AS startDate, m.end_date AS endDate,
+       a.label, a.code, a.kind, a.color, m.start_date AS startDate, m.end_date AS endDate,
        m.weekend_policy AS weekendPolicy, m.holiday_policy AS holidayPolicy,
        m.worked_holidays AS workedHolidays, m.holiday_region AS holidayRegion
 FROM activities a
@@ -100,6 +102,7 @@ function toActivity(r: ActivityDbRow, settings: AppSettings, archived: boolean):
     missionLabel: r.missionLabel,
     clientName: r.clientName,
     label: r.label,
+    code: activityCode(r.code, r.label),
     kind: r.kind,
     color: r.color,
     startDate: r.startDate,

@@ -1,3 +1,4 @@
+import { activityCode, suggestActivityCode } from '../../../../shared/activity-code';
 import type { AdminTimesheetBoard, AdminTimesheetDetail, AdminTimesheetRow, Mission, TimesheetStatus, User } from '../../../../shared/types';
 import { STATUS_LABELS } from '../../../../shared/types';
 import { workingDays } from '../../../../shared/holidays';
@@ -222,8 +223,8 @@ export async function listMissions(db: D1Database, id?: string): Promise<Mission
     .bind(...(id ? [id] : []))
     .all<MissionDbRow>();
   const { results: acts } = await db
-    .prepare(`SELECT id, mission_id, label, color, active FROM activities WHERE mission_id IS NOT NULL ORDER BY label`)
-    .all<{ id: string; mission_id: string; label: string; color: string; active: number }>();
+    .prepare(`SELECT id, mission_id, label, code, color, active FROM activities WHERE mission_id IS NOT NULL ORDER BY label`)
+    .all<{ id: string; mission_id: string; label: string; code: string | null; color: string; active: number }>();
   return results.map((m) => ({
     id: m.id,
     consultantId: m.consultant_id,
@@ -248,7 +249,7 @@ export async function listMissions(db: D1Database, id?: string): Promise<Mission
     holidayRegion: m.holiday_region,
     activities: acts
       .filter((a) => a.mission_id === m.id)
-      .map((a) => ({ id: a.id, label: a.label, color: a.color, active: !!a.active })),
+      .map((a) => ({ id: a.id, label: a.label, code: activityCode(a.code, a.label), color: a.color, active: !!a.active })),
   }));
 }
 
@@ -271,6 +272,27 @@ export async function emailTaken(db: D1Database, email: string, exceptId?: strin
   return !!row;
 }
 
-export function newActivityStmt(db: D1Database, missionId: string, label: string, color: string): D1PreparedStatement {
-  return db.prepare(`INSERT INTO activities (id, mission_id, label, kind, color) VALUES (?, ?, ?, 'travail', ?)`).bind(newId(), missionId, label, color);
+export function newActivityStmt(db: D1Database, missionId: string, label: string, color: string, code: string): D1PreparedStatement {
+  return db
+    .prepare(`INSERT INTO activities (id, mission_id, label, code, kind, color) VALUES (?, ?, ?, ?, 'travail', ?)`)
+    .bind(newId(), missionId, label, code, color);
+}
+
+/** Codes déjà pris : absences communes et activités de la mission (un code est unique dans ce périmètre). */
+export async function takenCodes(db: D1Database, missionId: string | null, exceptActivityId = ''): Promise<string[]> {
+  const { results } = await db
+    .prepare('SELECT label, code FROM activities WHERE (mission_id IS NULL OR mission_id = ?) AND id != ?')
+    .bind(missionId ?? '', exceptActivityId)
+    .all<{ label: string; code: string | null }>();
+  return results.map((r) => activityCode(r.code, r.label));
+}
+
+/** Codes attribués aux nouvelles activités d'une mission (uniques avec les absences et les activités existantes). */
+export async function codedActivities(db: D1Database, missionId: string | null, labels: string[]): Promise<Array<{ label: string; code: string }>> {
+  const taken = await takenCodes(db, missionId);
+  return labels.map((label) => {
+    const code = suggestActivityCode(label, taken);
+    taken.push(code);
+    return { label, code };
+  });
 }

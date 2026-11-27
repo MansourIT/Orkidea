@@ -91,8 +91,8 @@ export class Api {
   clients = () => this.get<Client[]>('/api/admin/clients');
   createClient = (body: ClientInput) => this.send<{ id: string }>('POST', '/api/admin/clients', body);
   updateClient = (id: string, body: Partial<ClientInput>) => this.send<Client>('PATCH', `/api/admin/clients/${id}`, body);
-  updateActivity = (id: string, body: { label?: string; color?: string; active?: boolean }) =>
-    this.send<{ id: string; label: string; color: string; active: boolean }>('PATCH', `/api/admin/activities/${id}`, body);
+  updateActivity = (id: string, body: { label?: string; code?: string; color?: string; active?: boolean }) =>
+    this.send<{ id: string; label: string; code: string; color: string; active: boolean }>('PATCH', `/api/admin/activities/${id}`, body);
   missions = () => this.get<Mission[]>('/api/admin/missions');
   createMission = (body: MissionInput & { consultantId: string; clientId: string; color?: string; activities?: string[] }) =>
     this.send<{ id: string }>('POST', '/api/admin/missions', body);

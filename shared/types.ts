@@ -22,6 +22,8 @@ export interface Activity {
   missionLabel: string | null;
   clientName: string | null;
   label: string;
+  /** Code court affiché dans le calendrier (DEV, REU, CP…). */
+  code: string;
   kind: ActivityKind;
   color: string;
   /** Dates de la mission (null pour les absences ou mission sans fin). */
@@ -168,7 +170,7 @@ export interface Mission extends MissionCalendarOverrides {
   terms: string | null;
   paymentTermsDays: number | null;
   active: boolean;
-  activities: Array<{ id: string; label: string; color: string; active: boolean }>;
+  activities: Array<{ id: string; label: string; code: string; color: string; active: boolean }>;
 }
 
 export type TimesheetEventAction = 'SOUMISSION' | 'VALIDATION_CLIENT' | 'REJET_CLIENT' | 'VALIDATION' | 'CLOTURE' | 'REOUVERTURE' | 'RELANCE';

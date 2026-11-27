@@ -438,3 +438,33 @@ describe('Exploitation', () => {
     expect(Object.keys(doc.paths)).toEqual(expect.arrayContaining(['/api/timesheets/{month}', '/api/admin/missions/{id}', '/api/auth/login']));
   });
 });
+
+describe('Code court des activités', () => {
+  it('codes proposés à la création, uniques par mission, modifiables et contrôlés', async () => {
+    const { login: doLogin, call: doCall, json: asJson, ADMIN: admin } = await import('./helpers');
+    const cookie = await doLogin(admin);
+    const created = await asJson<{ id: string }>(
+      await doCall('/api/admin/missions', {
+        method: 'POST',
+        cookie,
+        body: { consultantId: 'u-jd', clientId: 'c-beta', label: 'Projet Codes', startDate: '2026-12-01', activities: ['Développement', 'Mise en production', 'Développeur'] },
+      }),
+    );
+    const missions = await asJson<Array<{ id: string; activities: Array<{ id: string; label: string; code: string }> }>>(await doCall('/api/admin/missions', { cookie }));
+    const acts = missions.find((m) => m.id === created.id)!.activities;
+    expect(Object.fromEntries(acts.map((a) => [a.label, a.code]))).toEqual({ Développement: 'DEV', 'Mise en production': 'MEP', Développeur: 'DEV2' });
+
+    const dev = acts.find((a) => a.code === 'DEV')!;
+    expect((await doCall(`/api/admin/activities/${dev.id}`, { method: 'PATCH', cookie, body: { code: 'MEP' } })).status).toBe(409);
+    expect((await doCall(`/api/admin/activities/${dev.id}`, { method: 'PATCH', cookie, body: { code: 'CP' } })).status).toBe(409);
+    expect((await doCall(`/api/admin/activities/${dev.id}`, { method: 'PATCH', cookie, body: { code: 'TROP-LONG' } })).status).toBe(400);
+    const ok = await doCall(`/api/admin/activities/${dev.id}`, { method: 'PATCH', cookie, body: { code: 'dv' } });
+    expect(await asJson<{ code: string }>(ok)).toMatchObject({ code: 'DV' });
+
+    // Activités existantes sans code : code déduit du libellé ; absences : codes de la migration.
+    const consultant = await doLogin('jean.dupont@example.com');
+    const list = await asJson<Array<{ id: string; code: string }>>(await doCall('/api/activities', { cookie: consultant }));
+    const codes = Object.fromEntries(list.map((a) => [a.id, a.code]));
+    expect(codes).toMatchObject({ 'a-alpha-dev': 'DEV', 'a-alpha-reu': 'REU', 'abs-cp': 'CP', 'abs-rtt': 'RTT', 'abs-maladie': 'MAL', 'abs-autre': 'ABS' });
+  });
+});

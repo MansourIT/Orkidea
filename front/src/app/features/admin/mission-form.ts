@@ -6,6 +6,8 @@ import type { AdminUser, Client, HolidayCode, Mission } from '@shared/types';
 import type { AppSettings, DayPolicy } from '@shared/settings';
 import { HOLIDAY_CODES, HOLIDAY_LABELS, type HolidayRegion } from '@shared/holidays';
 import { Api, apiError, type MissionInput } from '../../core/api';
+import { ACTIVITY_CODE_HINT, ACTIVITY_CODE_RE } from '@shared/activity-code';
+import { Confirm } from '../../ui/confirm-dialog';
 import { Segmented, type SegmentOption } from '../../ui/segmented';
 import { ToggleSwitch } from '../../ui/toggle-switch';
 
@@ -129,11 +131,13 @@ const REGION_OPTIONS: SegmentOption<Inherit<HolidayRegion>>[] = [
         <!-- 3. Activités -->
         <section aria-labelledby="sec-activites">
           <h3 id="sec-activites" class="section-title"><span class="section-num">3</span> Activités</h3>
-          <p class="mb-2 text-xs text-ink-soft">Ce que le consultant pourra saisir sur cette mission (ex. Développement, Réunion, Formation).</p>
+          <p class="mb-2 text-xs text-ink-soft">Ce que le consultant pourra saisir sur cette mission (ex. Développement, Réunion, Formation). Le code court (DEV, REU…) s’affiche dans les cases du calendrier ; cliquez dessus pour le changer.</p>
           <ul class="flex flex-wrap gap-2">
             @for (a of mission()?.activities ?? []; track a.id) {
               <li class="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs" [class]="a.active ? 'border-slate-300 bg-white' : 'border-dashed border-slate-300 text-ink-soft'">
                 <span class="h-2 w-2 rounded-full" [style.background]="a.active ? form.controls.color.value : '#CBD5E1'" aria-hidden="true"></span>
+                <button type="button" class="rounded bg-slate-100 px-1 font-mono text-[10px] font-semibold leading-4 text-ink hover:bg-orchid-50 hover:text-orchid-700" (click)="editCode(a)"
+                        [attr.aria-label]="'Code de ' + a.label + ' : ' + a.code + ', modifier'" title="Modifier le code court">{{ a.code }}</button>
                 <span [class.line-through]="!a.active">{{ a.label }}</span>
                 <button type="button" class="ml-1 text-ink-soft hover:text-ink" (click)="toggleActivity(a)" [attr.aria-label]="(a.active ? 'Désactiver ' : 'Réactiver ') + a.label" [title]="a.active ? 'Désactiver' : 'Réactiver'">
                   <ng-icon [name]="a.active ? 'lucideX' : 'lucideRotateCcw'" size="12" />
@@ -239,6 +243,7 @@ const REGION_OPTIONS: SegmentOption<Inherit<HolidayRegion>>[] = [
 })
 export class MissionForm implements OnInit {
   private readonly api = inject(Api);
+  private readonly confirm = inject(Confirm);
 
   readonly mission = input<Mission | null>(null);
   readonly consultants = input<AdminUser[]>([]);
@@ -399,6 +404,31 @@ export class MissionForm implements OnInit {
       this.error.set(e.error + (e.details?.length ? ` (${e.details.join(' ; ')})` : ''));
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  /** Code court d'une activité existante (unique dans la mission et parmi les absences). */
+  async editCode(a: Mission['activities'][number]): Promise<void> {
+    const value = (
+      await this.confirm.prompt({
+        title: `Code court de « ${a.label} »`,
+        message: `Affiché dans les cases du calendrier du consultant. ${ACTIVITY_CODE_HINT}.`,
+        confirmLabel: 'Enregistrer',
+        input: { label: 'Code', required: true, initial: a.code },
+      })
+    )
+      ?.trim()
+      .toUpperCase();
+    if (!value || value === a.code) return;
+    if (!ACTIVITY_CODE_RE.test(value)) {
+      this.error.set(`Code « ${value} » invalide : ${ACTIVITY_CODE_HINT}.`);
+      return;
+    }
+    try {
+      await this.api.updateActivity(a.id, { code: value });
+      this.changed.emit();
+    } catch (err) {
+      this.error.set(apiError(err).error);
     }
   }
 

@@ -61,7 +61,7 @@ export const tint = (color: string, pct = 20) => `color-mix(in srgb, ${color} ${
                 >
                   <span class="relative z-10 font-medium" [class.text-slate-400]="d.nonWorking && !d.entries.length">{{ d.day }}</span>
                   @if (d.entries.length) {
-                    <span class="relative z-10 text-[10px] font-semibold text-ink/70 sm:text-xs">{{ format(d.total) }}</span>
+                    <span class="relative z-10 max-w-full truncate px-0.5 font-mono text-[9px] font-semibold text-ink/80 sm:text-[11px]" aria-hidden="true">{{ codes(d) }}</span>
                   } @else if (d.holiday) {
                     <span class="relative z-10 hidden w-full truncate px-1 text-[10px] leading-tight text-slate-400 md:block">{{ d.holiday }}</span>
                   }
@@ -185,6 +185,11 @@ export class CalendarGrid {
   protected borderColor(d: DayCell): string | null {
     const [a] = d.entries;
     return a ? `color-mix(in srgb, ${this.color(a)} 65%, white)` : null;
+  }
+
+  /** Codes des activités du jour (DEV, ou DEV·CP pour deux demi-journées). */
+  protected codes(d: DayCell): string {
+    return d.entries.map((e) => this.store.activityById().get(e.activityId)?.code ?? '?').join('·');
   }
 
   protected tooltip(d: DayCell): string {

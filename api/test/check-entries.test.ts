@@ -6,9 +6,9 @@ import type { DayRules } from '../../shared/settings';
 const STRICT: DayRules = { weekend: 'INTERDIT', holidays: 'INTERDIT', workedHolidays: [], region: 'metropole' };
 
 const acts: Activity[] = [
-  { id: 'dev', missionId: 'm1', missionLabel: 'Alpha', clientName: 'C', label: 'Dev', kind: 'travail', color: '#000', startDate: '2026-11-05', endDate: '2026-11-20', rules: STRICT },
-  { id: 'cp', missionId: null, missionLabel: null, clientName: null, label: 'CP', kind: 'absence', color: '#000', startDate: null, endDate: null, rules: STRICT },
-  { id: 'astreinte', missionId: 'm2', missionLabel: 'Beta', clientName: 'C', label: 'Astreinte', kind: 'travail', color: '#000', startDate: null, endDate: null, rules: { ...STRICT, weekend: 'AUTORISE', workedHolidays: ['armistice'] } },
+  { id: 'dev', missionId: 'm1', missionLabel: 'Alpha', clientName: 'C', label: 'Dev', code: 'DEV', kind: 'travail', color: '#000', startDate: '2026-11-05', endDate: '2026-11-20', rules: STRICT },
+  { id: 'cp', missionId: null, missionLabel: null, clientName: null, label: 'CP', code: 'CP', kind: 'absence', color: '#000', startDate: null, endDate: null, rules: STRICT },
+  { id: 'astreinte', missionId: 'm2', missionLabel: 'Beta', clientName: 'C', label: 'Astreinte', code: 'AST', kind: 'travail', color: '#000', startDate: null, endDate: null, rules: { ...STRICT, weekend: 'AUTORISE', workedHolidays: ['armistice'] } },
 ];
 
 const e = (date: string, activityId = 'dev', quantity: number = 1) => ({ date, activityId, quantity }) as Entry;

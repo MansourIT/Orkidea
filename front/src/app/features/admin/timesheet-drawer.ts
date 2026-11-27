@@ -189,7 +189,7 @@ export class TimesheetDrawer implements OnInit {
   }
 
   private activity(id: string): Activity {
-    return this.byId().get(id) ?? { id, missionId: null, missionLabel: null, clientName: null, label: 'Activité inconnue', kind: 'travail', color: '#9AA0A6', startDate: null, endDate: null, rules: { weekend: 'INTERDIT', holidays: 'INTERDIT', workedHolidays: [], region: 'metropole' } };
+    return this.byId().get(id) ?? { id, missionId: null, missionLabel: null, clientName: null, label: 'Activité inconnue', code: '?', kind: 'travail', color: '#9AA0A6', startDate: null, endDate: null, rules: { weekend: 'INTERDIT', holidays: 'INTERDIT', workedHolidays: [], region: 'metropole' } };
   }
 
   private name(id: string): string {

@@ -45,7 +45,7 @@ import { TimesheetStore } from './timesheet.store';
             >
               <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" [style.background]="a.color" aria-hidden="true"></span>
               <span class="min-w-0">
-                <span class="block truncate text-sm font-semibold text-ink">{{ a.missionLabel ?? a.label }}</span>
+                <span class="flex items-center gap-1.5"><span class="shrink-0 rounded bg-slate-100 px-1 font-mono text-[10px] font-semibold leading-4 text-ink">{{ a.code }}</span><span class="truncate text-sm font-semibold text-ink">{{ a.missionLabel ?? a.label }}</span></span>
                 <span class="block truncate text-xs text-ink-soft">{{ a.missionLabel ? a.label : 'Absence' }}</span>
               </span>
             </button>
