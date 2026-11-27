@@ -6,6 +6,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { map } from 'rxjs';
 import type { Activity } from '@shared/types';
+import { formatMinutes } from '@shared/astreintes';
 import { TimesheetStore } from './timesheet.store';
 
 /** Panneau « Liste de projets/activités » : choix du pinceau, case Partiel, ordre par glisser-déposer. */
@@ -98,6 +99,23 @@ import { TimesheetStore } from './timesheet.store';
           </div>
         }
       </div>
+
+      @if (store.onCallMissions().length) {
+        @let t = store.onCallSummary();
+        <h3 class="mt-5 mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-ink-soft uppercase">
+          <ng-icon name="lucideSiren" size="14" class="text-red-600" aria-hidden="true" /> Astreintes
+        </h3>
+        <div class="rounded-xl border border-red-100 bg-red-50/40 p-3 text-xs">
+          <p class="text-ink">
+            <span class="font-semibold">{{ t.days }}</span> jour{{ t.days > 1 ? 's' : '' }} d’astreinte ·
+            <span class="font-semibold">{{ format(t.minutes) }}</span> d’intervention
+          </p>
+          @if (t.minutes) { <p class="mt-0.5 text-ink-soft">dont nuit {{ format(t.night) }} · week-end {{ format(t.weekend) }} · férié {{ format(t.holiday) }}</p> }
+          @if (store.editable()) {
+            <p class="mt-1.5 text-ink-soft">Sans activité sélectionnée, cliquez sur un jour pour déclarer l’astreinte et ses interventions (week-ends et fériés compris).</p>
+          }
+        </div>
+      }
     </section>
   `,
 })
@@ -105,6 +123,8 @@ export class ActivityPanel {
   protected readonly store = inject(TimesheetStore);
   private readonly desktop = toSignal(inject(BreakpointObserver).observe('(min-width: 1024px)').pipe(map((s) => s.matches)), { initialValue: true });
   protected readonly orientation = computed(() => (this.desktop() ? 'vertical' : 'horizontal'));
+
+  protected readonly format = formatMinutes;
 
   protected name(a: Activity): string {
     return a.missionLabel ? `${a.missionLabel} – ${a.label}` : a.label;

@@ -9,6 +9,8 @@ import { ValidationPage } from './validation-page';
 const TOKEN = 'jeton-valideur-0123456789';
 const URL = `/api/public/validations/${TOKEN}`;
 const VIEW: PublicValidationView = {
+  onCallDays: [],
+  interventions: [],
   consultant: 'Jean Dupont',
   month: '2026-11',
   mission: 'Projet Alpha',

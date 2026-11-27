@@ -104,7 +104,7 @@ const REGION_OPTIONS: SegmentOption<Inherit<HolidayRegion>>[] = [
 
         <!-- 2. Validation client -->
         <section aria-labelledby="sec-validation">
-          <h3 id="sec-validation" class="section-title"><span class="section-num">2</span> Validation client</h3>
+          <h3 id="sec-validation" class="section-title"><span class="section-num">2</span> Validation client et astreintes</h3>
           <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3">
             <div>
               <p class="text-sm font-medium text-ink">Validation client exigée par le contrat</p>
@@ -126,6 +126,14 @@ const REGION_OPTIONS: SegmentOption<Inherit<HolidayRegion>>[] = [
               </div>
             </div>
           }
+
+          <div class="mt-3 flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3">
+            <div>
+              <p class="flex items-center gap-1.5 text-sm font-medium text-ink"><ng-icon name="lucideSiren" size="14" class="text-red-600" aria-hidden="true" /> Astreintes</p>
+              <p class="text-xs text-ink-soft">Le consultant peut déclarer des jours d’astreinte et ses interventions (heures), y compris les week-ends et jours fériés.</p>
+            </div>
+            <app-switch label="Astreintes possibles sur cette mission" [checked]="onCall()" (checkedChange)="form.controls.onCall.setValue($event)" />
+          </div>
         </section>
 
         <!-- 3. Activités -->
@@ -279,6 +287,7 @@ export class MissionForm implements OnInit {
       clientValidation: [false],
       validatorName: [''],
       validatorEmail: [''],
+      onCall: [false],
       weekendPolicy: ['' as Inherit<DayPolicy>],
       holidayPolicy: ['' as Inherit<DayPolicy>],
       holidayRegion: ['' as Inherit<HolidayRegion>],
@@ -294,6 +303,7 @@ export class MissionForm implements OnInit {
   private readonly values$ = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
   protected readonly validation = computed(() => !!this.values$().clientValidation);
   protected readonly overrideWorked = computed(() => !!this.values$().overrideWorkedHolidays);
+  protected readonly onCall = computed(() => !!this.values$().onCall);
 
   /** Règles effectives en clair (réglage de la mission, sinon réglage global). */
   protected readonly effectiveRules = computed(() => {
@@ -324,6 +334,7 @@ export class MissionForm implements OnInit {
         clientValidation: m.clientValidation,
         validatorName: m.validatorName ?? '',
         validatorEmail: m.validatorEmail ?? '',
+        onCall: m.onCall,
         weekendPolicy: m.weekendPolicy ?? '',
         holidayPolicy: m.holidayPolicy ?? '',
         holidayRegion: m.holidayRegion ?? '',
@@ -373,6 +384,7 @@ export class MissionForm implements OnInit {
       clientValidation: v.clientValidation,
       validatorName: v.clientValidation ? v.validatorName.trim() : v.validatorName.trim() || null,
       validatorEmail: v.clientValidation ? v.validatorEmail.trim() : v.validatorEmail.trim() || null,
+      onCall: v.onCall,
       weekendPolicy: v.weekendPolicy || null,
       holidayPolicy: v.holidayPolicy || null,
       holidayRegion: v.holidayRegion || null,
