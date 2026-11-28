@@ -5,12 +5,13 @@ import { Confirm } from '../../ui/confirm-dialog';
 import { type Tab, Tabs } from '../../ui/tabs';
 import { AdminClients } from './admin-clients';
 import { AdminContracts } from './admin-contracts';
+import { AdminInvoices } from '../invoices/admin-invoices';
 import { AdminMissions } from './admin-missions';
 import { AdminSettings } from './admin-settings';
 import { AdminTimesheets } from './admin-timesheets';
 import { AdminUsers } from './admin-users';
 
-type TabId = 'cra' | 'consultants' | 'clients' | 'missions' | 'contrats' | 'parametres';
+type TabId = 'cra' | 'consultants' | 'clients' | 'missions' | 'contrats' | 'factures' | 'parametres';
 
 const TABS: Tab<TabId>[] = [
   { id: 'cra', label: 'CRA du mois', icon: 'lucideCalendarDays' },
@@ -18,13 +19,14 @@ const TABS: Tab<TabId>[] = [
   { id: 'clients', label: 'Clients', icon: 'lucideBuilding2' },
   { id: 'missions', label: 'Missions', icon: 'lucideBriefcase' },
   { id: 'contrats', label: 'Contrats', icon: 'lucideFileText' },
+  { id: 'factures', label: 'Factures', icon: 'lucideReceipt' },
   { id: 'parametres', label: 'Paramètres', icon: 'lucideSettings' },
 ];
 
 /** Back-office Orkidea. L'onglet est dans l'URL (?onglet=…) pour pouvoir le partager / y revenir. */
 @Component({
   selector: 'app-admin-page',
-  imports: [Tabs, AdminTimesheets, AdminUsers, AdminClients, AdminMissions, AdminContracts, AdminSettings],
+  imports: [Tabs, AdminTimesheets, AdminUsers, AdminClients, AdminMissions, AdminContracts, AdminInvoices, AdminSettings],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 class="text-2xl font-bold sm:text-3xl">Administration</h1>
@@ -36,6 +38,7 @@ const TABS: Tab<TabId>[] = [
         @case ('clients') { <app-admin-clients /> }
         @case ('missions') { <app-admin-missions /> }
         @case ('contrats') { <app-admin-contracts /> }
+        @case ('factures') { <app-admin-invoices /> }
         @case ('parametres') { <app-admin-settings /> }
       }
     </div>

@@ -7,6 +7,7 @@ import { scheduled } from './cron';
 import { adminRoutes } from './modules/admin/admin.routes';
 import { contractRoutes } from './modules/contracts/contracts.routes';
 import { templateRoutes } from './modules/contracts/templates.routes';
+import { invoiceRoutes } from './modules/invoices/invoices.routes';
 import { authRoutes } from './modules/auth/auth.routes';
 import { timesheetRoutes } from './modules/timesheets/timesheets.routes';
 import { validationRoutes } from './modules/validation/validation.routes';
@@ -37,6 +38,7 @@ app.route('/api/auth', authRoutes);
 app.route('/api/public/validations', validationRoutes);
 app.route('/api/admin/contract-templates', templateRoutes);
 app.route('/api/admin/contracts', contractRoutes);
+app.route('/api/admin/invoices', invoiceRoutes);
 app.route('/api/admin', adminRoutes);
 
 app.doc('/api/openapi.json', {

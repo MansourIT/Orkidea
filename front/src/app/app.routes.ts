@@ -52,6 +52,14 @@ export const routes: Routes = [
         canDeactivate: [unsavedChangesGuard],
         loadComponent: () => import('./features/contracts/contract-page').then((m) => m.ContractPage),
       },
+      {
+        path: 'admin/factures/:id',
+        title: T('Facture'),
+        canActivate: [adminGuard],
+        canDeactivate: [unsavedChangesGuard],
+        data: { recreateOnParamChange: true }, // avoir ↔ facture d'origine : nouvelle instance
+        loadComponent: () => import('./features/invoices/invoice-page').then((m) => m.InvoicePage),
+      },
       { path: 'admin', title: T('Administration'), canActivate: [adminGuard], canDeactivate: [unsavedChangesGuard], loadComponent: () => import('./features/admin/admin-page').then((m) => m.AdminPage) },
     ],
   },

@@ -10,7 +10,10 @@ import type {
   Client,
   ClientConfig,
   ClientInput,
+  BillableItem,
   ContractDetail,
+  InvoiceDetail,
+  InvoiceSummary,
   ContractSummary,
   ContractTemplateDetail,
   ContractTemplateSummary,
@@ -25,6 +28,7 @@ import type {
   User,
 } from '@shared/types';
 import type { CompanySettings } from '@shared/company';
+import type { InvoiceLine, InvoiceSettings } from '@shared/factures';
 import type { AppSettings, MissionCalendarOverrides } from '@shared/settings';
 
 /** Champs modifiables d'une mission (création et modification). */
@@ -37,6 +41,11 @@ export interface MissionInput extends MissionCalendarOverrides {
   validatorName: string | null;
   validatorEmail: string | null;
   onCall: boolean;
+  purchaseOrder: string | null;
+  onCallDailyRate: number | null;
+  onCallHourlyRate: number | null;
+  onCallNightPct: number | null;
+  onCallWeekendPct: number | null;
   purpose: string | null;
   location: string | null;
   terms: string | null;
@@ -129,6 +138,23 @@ export class Api {
   markContractSent = (id: string, comment?: string) => this.send<ContractDetail>('POST', `/api/admin/contracts/${id}/sent`, { comment });
   uploadSignedContract = (id: string, file: Blob, signedOn: string) =>
     firstValueFrom(this.http.put<ContractDetail>(`/api/admin/contracts/${id}/signed`, file, { params: { signedOn }, headers: { 'content-type': 'application/pdf' } }));
+
+  // Facturation
+  invoiceSettings = () => this.get<InvoiceSettings>('/api/admin/invoices/settings');
+  saveInvoiceSettings = (s: InvoiceSettings) => this.send<InvoiceSettings>('PUT', '/api/admin/invoices/settings', s);
+  billable = (month: string) => this.get<BillableItem[]>('/api/admin/invoices/billable', { month });
+  invoices = (month?: string) => this.get<InvoiceSummary[]>('/api/admin/invoices', month ? { month } : undefined);
+  invoice = (id: string) => this.get<InvoiceDetail>(`/api/admin/invoices/${id}`);
+  createInvoice = (missionId: string, month: string) => this.send<{ id: string }>('POST', '/api/admin/invoices', { missionId, month });
+  updateInvoice = (id: string, body: { lines?: InvoiceLine[]; notes?: string | null; purchaseOrder?: string | null; baseUpdatedAt: string }) =>
+    this.send<InvoiceDetail>('PATCH', `/api/admin/invoices/${id}`, body);
+  deleteInvoice = (id: string) => firstValueFrom(this.http.delete<{ ok: true }>(`/api/admin/invoices/${id}`));
+  issueInvoice = (id: string, baseUpdatedAt: string) => this.send<InvoiceDetail>('POST', `/api/admin/invoices/${id}/issue`, { baseUpdatedAt });
+  markInvoiceSent = (id: string) => this.send<InvoiceDetail>('POST', `/api/admin/invoices/${id}/sent`);
+  markInvoicePaid = (id: string, paidOn: string) => this.send<InvoiceDetail>('POST', `/api/admin/invoices/${id}/paid`, { paidOn });
+  createCreditNote = (id: string) => this.send<{ id: string }>('POST', `/api/admin/invoices/${id}/credit-note`);
+  invoicePdfUrl = (id: string) => `/api/admin/invoices/${id}/pdf`;
+  salesJournalUrl = (year: string) => `/api/admin/invoices/journal?year=${year}`;
 
   company = () => this.get<CompanySettings>('/api/admin/company');
   saveCompany = (c: CompanySettings) => this.send<CompanySettings>('PUT', '/api/admin/company', c);

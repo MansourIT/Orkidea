@@ -21,12 +21,12 @@ const type = (el: HTMLElement, id: string, value: string) => {
 
 const CLIENT: Client = {
   id: 'c1', name: 'Client Alpha', siret: null, address: null, postalCode: null, city: 'Paris',
-  representativeName: null, representativeRole: null, contractEmail: null,
+  representativeName: null, representativeRole: null, contractEmail: null, vatNumber: null, invoiceEmail: null,
 };
 const MISSION: Mission = {
   id: 'm1', consultantId: 'u-jd', consultant: 'Jean Dupont', clientId: 'c1', client: 'Client Alpha', label: 'Projet Alpha', startDate: '2026-01-01', endDate: null,
   tjm: 550, clientValidation: false, validatorName: null, validatorEmail: null, onCall: false, active: true, weekendPolicy: null, holidayPolicy: null, workedHolidays: null, holidayRegion: null,
-  purpose: null, location: null, terms: null, paymentTermsDays: null,
+  purpose: null, location: null, terms: null, paymentTermsDays: null, purchaseOrder: null, onCallDailyRate: null, onCallHourlyRate: null, onCallNightPct: null, onCallWeekendPct: null,
   activities: [{ id: 'a1', label: 'Développement', code: 'DEV', color: '#3B82F6', active: true }],
 };
 
@@ -65,7 +65,7 @@ describe('Données des contrats', () => {
     const req = http.expectOne({ method: 'PATCH', url: '/api/admin/clients/c1' });
     expect(req.request.body).toEqual({
       name: 'Client Alpha', siret: null, address: null, postalCode: null, city: 'Paris',
-      representativeName: 'Sophie Bernard', representativeRole: null, contractEmail: 'contrats@alpha.fr',
+      representativeName: 'Sophie Bernard', representativeRole: null, contractEmail: 'contrats@alpha.fr', vatNumber: null, invoiceEmail: null,
     });
     req.flush({ ...CLIENT, ...req.request.body });
     await tick();

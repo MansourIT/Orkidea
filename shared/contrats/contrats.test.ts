@@ -180,13 +180,13 @@ describe('modèle de démonstration', () => {
   };
   const client: Client = {
     id: 'c', name: 'Client Alpha', siret: '12345678900011', address: '12 rue de la Paix', postalCode: '75002', city: 'Paris',
-    representativeName: 'Sophie Bernard', representativeRole: 'Directrice des achats', contractEmail: null,
+    representativeName: 'Sophie Bernard', representativeRole: 'Directrice des achats', contractEmail: null, vatNumber: null, invoiceEmail: null
   };
   const mission: Mission = {
     id: 'm', consultantId: 'u', consultant: 'Jean Dupont', clientId: 'c', client: 'Client Alpha', label: 'Projet Alpha', startDate: '2026-12-01', endDate: null,
     tjm: 650, clientValidation: true, validatorName: 'Marie Martin', validatorEmail: 'marie@alpha.fr', onCall: false, active: true,
     weekendPolicy: null, holidayPolicy: null, workedHolidays: null, holidayRegion: null,
-    purpose: 'Refonte de la plateforme de paiement', location: 'Paris', terms: null, paymentTermsDays: 30, activities: [],
+    purpose: 'Refonte de la plateforme de paiement', location: 'Paris', terms: null, paymentTermsDays: 30, purchaseOrder: null, onCallDailyRate: null, onCallHourlyRate: null, onCallNightPct: null, onCallWeekendPct: null, activities: [],
   };
   const consultant = { name: 'Jean Dupont', email: 'jd@x.fr', qualification: 'Architecte logiciel' };
 

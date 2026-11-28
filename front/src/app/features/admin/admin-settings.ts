@@ -9,6 +9,7 @@ import { Segmented, type SegmentOption } from '../../ui/segmented';
 import { Stepper } from '../../ui/stepper';
 import { ToggleSwitch } from '../../ui/toggle-switch';
 import { CompanySettingsCard } from './company-settings';
+import { InvoiceSettingsCard } from './invoice-settings';
 import { SettingsPreview } from './settings-preview';
 
 const POLICIES: SegmentOption<DayPolicy>[] = [
@@ -37,7 +38,7 @@ const same = (a: AppSettings, b: AppSettings) =>
 /** Paramétrage global : jours non ouvrés et règles de soumission, avec aperçu en direct. */
 @Component({
   selector: 'app-admin-settings',
-  imports: [NgIcon, Segmented, ToggleSwitch, Stepper, SettingsPreview, CompanySettingsCard],
+  imports: [NgIcon, Segmented, ToggleSwitch, Stepper, SettingsPreview, CompanySettingsCard, InvoiceSettingsCard],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
   template: `
@@ -208,6 +209,9 @@ const same = (a: AppSettings, b: AppSettings) =>
 
           <!-- ===================================================== Société (contrats) -->
           <app-company-settings />
+
+          <!-- ===================================================== Facturation -->
+          <app-invoice-settings />
         </div>
 
         <aside class="lg:sticky lg:top-20">
@@ -243,6 +247,7 @@ export class AdminSettings implements OnInit {
   private readonly api = inject(Api);
   private readonly confirm = inject(Confirm);
   private readonly company = viewChild(CompanySettingsCard);
+  private readonly invoicing = viewChild(InvoiceSettingsCard);
 
   protected readonly policies = POLICIES;
   protected readonly regions = REGIONS;
@@ -329,7 +334,7 @@ export class AdminSettings implements OnInit {
 
   /** Utilisé par la page d'administration avant de changer d'onglet. */
   hasUnsavedChanges(): boolean {
-    return this.dirty() || !!this.company()?.dirty();
+    return this.dirty() || !!this.company()?.dirty() || !!this.invoicing()?.dirty();
   }
 
   onBeforeUnload(e: BeforeUnloadEvent): void {

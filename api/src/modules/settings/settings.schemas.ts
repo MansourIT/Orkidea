@@ -47,3 +47,26 @@ export const CompanySettingsSchema = z
     contractNumberPrefix: z.string().trim().regex(/^[A-Z]{1,6}$/, 'Préfixe : 1 à 6 lettres majuscules'),
   })
   .openapi('CompanySettings');
+
+/** Paramètres de facturation (préfixes de numérotation, TVA, coordonnées bancaires). */
+export const InvoiceSettingsSchema = z
+  .object({
+    prefix: z.string().trim().regex(/^[A-Z]{1,6}$/, 'Préfixe des factures : 1 à 6 lettres majuscules'),
+    creditPrefix: z.string().trim().regex(/^[A-Z]{1,6}$/, 'Préfixe des avoirs : 1 à 6 lettres majuscules'),
+    vatRate: z.number().min(0).max(30),
+    vatOnDebits: z.boolean(),
+    defaultPaymentDays: z.number().int().min(0).max(60, 'Délai de paiement : 60 jours au plus'),
+    latePenalty: z.string().trim().min(1).max(120),
+    iban: z
+      .string()
+      .trim()
+      .transform((v) => v.replace(/\s+/g, '').toUpperCase())
+      .refine((v) => v === '' || /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(v), 'IBAN invalide'),
+    bic: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .refine((v) => v === '' || /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(v), 'BIC invalide'),
+  })
+  .refine((s) => s.prefix !== s.creditPrefix, { message: 'Les préfixes des factures et des avoirs doivent différer' })
+  .openapi('InvoiceSettings');

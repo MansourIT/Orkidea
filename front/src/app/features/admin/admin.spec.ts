@@ -64,7 +64,7 @@ describe('Administration', () => {
     const m: Mission = {
       id: 'm1', consultantId: 'u-jd', consultant: 'Jean Dupont', clientId: 'c1', client: 'Client Alpha', label: 'Projet Alpha', startDate: '2026-01-01', endDate: null,
       tjm: 550, clientValidation: false, validatorName: null, validatorEmail: null, onCall: false, active: true, weekendPolicy: null, holidayPolicy: null, workedHolidays: ['lundi-pentecote'], holidayRegion: null,
-  purpose: null, location: null, terms: null, paymentTermsDays: null,
+  purpose: null, location: null, terms: null, paymentTermsDays: null, purchaseOrder: null, onCallDailyRate: null, onCallHourlyRate: null, onCallNightPct: null, onCallWeekendPct: null,
       activities: [{ id: 'a1', label: 'Développement', code: 'DEV', color: '#3B82F6', active: true }],
     };
     const f = TestBed.createComponent(MissionForm);

@@ -55,6 +55,23 @@ const EMAIL = /^([^@\s]+@[^@\s]+\.[^@\s]+)?$/;
               </div>
             </div>
           </section>
+
+          <section aria-labelledby="sec-facturation-client">
+            <h3 id="sec-facturation-client" class="section-title"><span class="section-num">3</span> Facturation</h3>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label for="cl-vat" class="label">N° de TVA intracommunautaire</label>
+                <input id="cl-vat" class="input uppercase" formControlName="vatNumber" placeholder="FR12345678901" [attr.aria-invalid]="invalid('vatNumber')" />
+                @if (invalid('vatNumber')) { <p class="mt-1 text-xs text-red-700">Format attendu : FR + 11 caractères.</p> }
+              </div>
+              <div>
+                <label for="cl-inv-email" class="label">Email pour les factures</label>
+                <input id="cl-inv-email" type="email" class="input" formControlName="invoiceEmail" [attr.aria-invalid]="invalid('invoiceEmail')" />
+                @if (invalid('invoiceEmail')) { <p class="mt-1 text-xs text-red-700">Email invalide.</p> }
+              </div>
+            </div>
+            <p class="mt-2 text-xs text-ink-soft">Le SIRET et l’adresse complète sont obligatoires pour émettre une facture.</p>
+          </section>
         </div>
 
         <footer class="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-3">
@@ -88,6 +105,8 @@ export class ClientDrawer {
     representativeName: [this.client?.representativeName ?? '', Validators.maxLength(120)],
     representativeRole: [this.client?.representativeRole ?? '', Validators.maxLength(80)],
     contractEmail: [this.client?.contractEmail ?? '', [Validators.pattern(EMAIL)]],
+    vatNumber: [this.client?.vatNumber ?? '', [Validators.pattern(/^([A-Za-z]{2}[0-9A-Za-z]{2,13})?$/)]],
+    invoiceEmail: [this.client?.invoiceEmail ?? '', [Validators.pattern(EMAIL)]],
   });
 
   protected invalid(name: keyof typeof this.form.controls): boolean {
@@ -111,6 +130,8 @@ export class ClientDrawer {
       representativeName: orNull(v.representativeName),
       representativeRole: orNull(v.representativeRole),
       contractEmail: orNull(v.contractEmail),
+      vatNumber: orNull(v.vatNumber)?.toUpperCase() ?? null,
+      invoiceEmail: orNull(v.invoiceEmail),
     };
     this.busy.set(true);
     this.error.set(null);

@@ -2,6 +2,7 @@
 import type { AppSettings, DayRules, MissionCalendarOverrides } from './settings';
 import type { HolidayCode, HolidayRegion } from './holidays';
 import type { Intervention, OnCallDay, OnCallMission } from './astreintes';
+import type { InvoiceKind, InvoiceLine, InvoiceStatus } from './factures';
 
 export type Role = 'consultant' | 'admin';
 
@@ -155,6 +156,9 @@ export interface Client {
   representativeRole: string | null;
   /** Destinataire des contrats (peut différer du valideur des CRA). */
   contractEmail: string | null;
+  /** N° de TVA intracommunautaire et destinataire des factures. */
+  vatNumber: string | null;
+  invoiceEmail: string | null;
 }
 
 /** Champs modifiables d'un client (création et modification). */
@@ -180,6 +184,12 @@ export interface Mission extends MissionCalendarOverrides {
   location: string | null;
   terms: string | null;
   paymentTermsDays: number | null;
+  /** Facturation : référence de commande du client, tarifs d'astreinte (€ HT) et majorations (%). */
+  purchaseOrder: string | null;
+  onCallDailyRate: number | null;
+  onCallHourlyRate: number | null;
+  onCallNightPct: number | null;
+  onCallWeekendPct: number | null;
   active: boolean;
   activities: Array<{ id: string; label: string; code: string; color: string; active: boolean }>;
 }
@@ -311,4 +321,64 @@ export interface ContractDetail extends ContractSummary {
   signedPdfSha256: string | null;
   cancelReason: string | null;
   events: ContractEvent[];
+}
+
+// ---------------------------------------------------------------- Factures
+
+export interface InvoiceSummary {
+  id: string;
+  kind: InvoiceKind;
+  number: string | null;
+  status: InvoiceStatus;
+  client: { id: string; name: string };
+  mission: { id: string; label: string };
+  consultant: string;
+  month: string;
+  totalHt: number;
+  totalTtc: number;
+  issueDate: string | null;
+  dueDate: string | null;
+  paidOn: string | null;
+  creditedInvoiceId: string | null;
+  /** Facture émise ou envoyée dont l'échéance est passée. */
+  overdue: boolean;
+}
+
+export interface InvoiceEvent {
+  action: 'CREATION' | 'MODIFICATION' | 'EMISSION' | 'ENVOI' | 'PAIEMENT' | 'AVOIR';
+  actor: string;
+  comment: string | null;
+  createdAt: string;
+}
+
+export interface InvoiceDetail extends InvoiceSummary {
+  lines: InvoiceLine[];
+  vatRate: number;
+  totalVat: number;
+  purchaseOrder: string | null;
+  notes: string | null;
+  pdfSha256: string | null;
+  sentAt: string | null;
+  updatedAt: string;
+  /** Avoir lié (facture annulée) ou facture d'origine (avoir). */
+  related: { id: string; number: string | null; kind: InvoiceKind } | null;
+  /** Données manquantes pour émettre (vendeur, client). */
+  missing: string[];
+  events: InvoiceEvent[];
+}
+
+/** Mission dont le CRA du mois est validé et pas encore facturé (GET /api/admin/invoices/billable). */
+export interface BillableItem {
+  missionId: string;
+  mission: string;
+  client: string;
+  consultant: string;
+  month: string;
+  timesheetStatus: TimesheetStatus;
+  days: number;
+  onCallDays: number;
+  interventionMinutes: number;
+  lines: InvoiceLine[];
+  totalHt: number;
+  problems: string[];
 }
