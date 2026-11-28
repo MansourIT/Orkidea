@@ -1,10 +1,10 @@
-import { CdkConnectedOverlay, type ConnectedPosition } from '@angular/cdk/overlay';
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { Dialog } from '@angular/cdk/dialog';
+import { ChangeDetectionStrategy, Component, ElementRef, Injector, computed, inject, signal } from '@angular/core';
 import { NgIcon } from '@ng-icons/core';
 import type { Entry } from '@shared/types';
 import { WEEKDAY_NAMES } from '@shared/dates';
 import { formatDays } from '../../core/format';
-import { OnCallEditor } from './on-call-editor';
+import { DayDialog, type DayDialogData } from './day-dialog';
 import { type DayCell, TimesheetStore } from './timesheet.store';
 
 const HEADERS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
@@ -15,12 +15,12 @@ export const tint = (color: string, pct = 20) => `color-mix(in srgb, ${color} ${
 /**
  * Grille mensuelle Lun → Dim.
  * - Pinceau actif : clic ou appui maintenu + glisser (souris et tactile, pointer events) ;
- * - sans pinceau : clic → popover de détail du jour ;
+ * - sans pinceau : clic → modale du jour (activités, astreinte) ; avec un pinceau : bouton « + » de la case ou Maj+Entrée ;
  * - clavier : flèches pour se déplacer, Entrée / Espace pour appliquer (ou ouvrir le détail).
  */
 @Component({
   selector: 'app-calendar-grid',
-  imports: [NgIcon, CdkConnectedOverlay, OnCallEditor],
+  imports: [NgIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div
@@ -44,7 +44,7 @@ export const tint = (color: string, pct = 20) => `color-mix(in srgb, ${color} ${
         <div role="row" class="mb-1.5 grid grid-cols-7 gap-1.5 sm:mb-2 sm:gap-2">
           @for (d of week; track $index) {
             @if (d) {
-              <div role="gridcell" [attr.aria-selected]="popoverDate() === d.date">
+              <div role="gridcell" class="relative" [attr.aria-selected]="openDate() === d.date">
                 <button
                   type="button"
                   [attr.data-date]="d.date"
@@ -60,20 +60,24 @@ export const tint = (color: string, pct = 20) => `color-mix(in srgb, ${color} ${
                   (keydown)="onKeydown($event, d)"
                   (focus)="focused.set(d.date)"
                 >
-                  @if (store.onCallByDate().get(d.date); as oc) {
-                    @if (oc.missions.length) {
-                      <span class="absolute right-0.5 top-0.5 z-10 flex items-center gap-0.5 rounded bg-red-50 px-0.5 text-[9px] font-semibold leading-3 text-red-700 sm:right-1 sm:top-1 sm:text-[10px]" aria-hidden="true">
-                        <ng-icon name="lucideSiren" size="10" />@if (oc.minutes) { <span class="hidden sm:inline">{{ hours(oc.minutes) }}</span> }
-                      </span>
-                    }
-                  }
                   <span class="relative z-10 font-medium" [class.text-slate-400]="d.nonWorking && !d.entries.length">{{ d.day }}</span>
                   @if (d.entries.length) {
                     <span class="relative z-10 max-w-full truncate px-0.5 font-mono text-[9px] font-semibold text-ink/80 sm:text-[11px]" aria-hidden="true">{{ codes(d) }}</span>
                   } @else if (d.holiday) {
                     <span class="relative z-10 hidden w-full truncate px-1 text-[10px] leading-tight text-slate-400 md:block">{{ d.holiday }}</span>
                   }
+                  @if (onCallAt(d.date); as oc) {
+                    <span class="absolute right-0.5 bottom-0.5 z-10 rounded bg-red-600 px-0.5 font-mono text-[8px] font-bold leading-3 text-white sm:right-1 sm:bottom-1 sm:px-1 sm:text-[10px] sm:leading-4" aria-hidden="true">AST</span>
+                  }
                 </button>
+                @if (store.brush() && store.editable()) {
+                  <!-- Avec un pinceau, le clic peint : ce bouton ouvre quand même la modale du jour (astreinte). -->
+                  <button type="button" class="absolute top-0.5 right-0.5 z-20 hidden h-5 w-5 items-center justify-center rounded-md bg-white/90 text-ink-soft shadow-sm ring-1 ring-slate-200 hover:text-orchid sm:flex"
+                          tabindex="-1" [attr.aria-label]="'Détail et astreinte du ' + store.dayLabel(d).split(' :')[0]" title="Détail du jour et astreinte"
+                          (pointerdown)="$event.stopPropagation()" (click)="openDay(d.date)">
+                    <ng-icon name="lucidePlus" size="12" aria-hidden="true" />
+                  </button>
+                }
               </div>
             } @else {
               <div role="gridcell" aria-hidden="true"></div>
@@ -83,56 +87,6 @@ export const tint = (color: string, pct = 20) => `color-mix(in srgb, ${color} ${
       }
     </div>
 
-    <ng-template
-      cdkConnectedOverlay
-      [cdkConnectedOverlayOrigin]="popoverOrigin()!"
-      [cdkConnectedOverlayOpen]="!!popoverDay()"
-      [cdkConnectedOverlayPositions]="positions"
-      [cdkConnectedOverlayPush]="true"
-      [cdkConnectedOverlayHasBackdrop]="true"
-      cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop"
-      (backdropClick)="closePopover()"
-      (attach)="watchPopoverSize()"
-      (detach)="closePopover()"
-      (overlayKeydown)="$event.key === 'Escape' && closePopover()"
-    >
-      @if (popoverDay(); as d) {
-        <div class="max-h-[calc(100dvh-1.5rem)] w-80 max-w-[92vw] overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-lg" role="dialog" [attr.aria-label]="'Détail du ' + store.dayLabel(d)">
-          <div class="mb-3 flex items-start justify-between gap-2">
-            <div>
-              <p class="font-semibold capitalize">{{ weekday(d) }} {{ d.day }}</p>
-              @if (d.holiday) { <p class="text-xs text-ink-soft">Férié : {{ d.holiday }}</p> }
-              @else if (d.weekend) { <p class="text-xs text-ink-soft">Week-end</p> }
-            </div>
-            <button type="button" class="btn-ghost -mt-1 -mr-2 p-1" (click)="closePopover()" aria-label="Fermer">
-              <ng-icon name="lucideX" size="16" />
-            </button>
-          </div>
-          <ul class="space-y-2">
-            @for (e of d.entries; track e.activityId) {
-              <li class="flex items-center gap-2 text-sm">
-                <span class="h-2.5 w-2.5 shrink-0 rounded-full" [style.background]="color(e)" aria-hidden="true"></span>
-                <span class="min-w-0 flex-1 truncate">{{ store.activityName(e.activityId) }}</span>
-                <span class="font-medium">{{ format(e.quantity) }}</span>
-                @if (store.editable()) {
-                  <button type="button" class="btn-ghost p-1" (click)="store.removeEntry(d.date, e.activityId)" [attr.aria-label]="'Retirer ' + store.activityName(e.activityId)">
-                    <ng-icon name="lucideX" size="14" />
-                  </button>
-                }
-              </li>
-            } @empty {
-              <li class="text-sm text-ink-soft">Aucune saisie.</li>
-            }
-          </ul>
-          @if (store.editable()) {
-            <p class="mt-3 text-xs text-ink-soft">Sélectionnez une activité à gauche pour saisir ce jour.</p>
-          }
-          @if (store.onCallMissions().length) {
-            <app-on-call-editor [date]="d.date" />
-          }
-        </div>
-      }
-    </ng-template>
   `,
 })
 export class CalendarGrid {
@@ -151,29 +105,10 @@ export class CalendarGrid {
     return days.find((d) => d.isToday)?.date ?? days[0]?.date ?? null;
   });
 
-  private readonly overlayDir = viewChild(CdkConnectedOverlay);
-  private resizeObserver: ResizeObserver | null = null;
-
-  constructor() {
-    inject(DestroyRef).onDestroy(() => this.resizeObserver?.disconnect());
-  }
-
-  /** Le détail du jour grandit (astreinte, formulaire d'intervention) : on le repositionne pour qu'il reste à l'écran. */
-  protected watchPopoverSize(): void {
-    const ref = this.overlayDir()?.overlayRef;
-    if (!ref || typeof ResizeObserver === 'undefined') return;
-    this.resizeObserver?.disconnect();
-    this.resizeObserver = new ResizeObserver(() => ref.updatePosition());
-    this.resizeObserver.observe(ref.overlayElement);
-  }
-
-  protected readonly popoverDate = signal<string | null>(null);
-  protected readonly popoverOrigin = signal<HTMLElement | null>(null);
-  protected readonly popoverDay = computed(() => this.store.days().find((d) => d.date === this.popoverDate()) ?? null);
-  protected readonly positions: ConnectedPosition[] = [
-    { originX: 'center', originY: 'bottom', overlayX: 'center', overlayY: 'top', offsetY: 6 },
-    { originX: 'center', originY: 'top', overlayX: 'center', overlayY: 'bottom', offsetY: -6 },
-  ];
+  private readonly dialog = inject(Dialog);
+  private readonly injector = inject(Injector);
+  /** Date dont la modale est ouverte. */
+  protected readonly openDate = signal<string | null>(null);
 
   // ------------------------------------------------------------ rendu
   protected isBlocked(d: DayCell): boolean {
@@ -221,7 +156,13 @@ export class CalendarGrid {
     return d.entries.map((e) => this.store.activityById().get(e.activityId)?.code ?? '?').join('·');
   }
 
-  /** « 2h30 » (badge d'astreinte). */
+  /** Astreinte du jour (indicateur AST), null s'il n'y en a pas. */
+  protected onCallAt(date: string): { missions: string[]; minutes: number } | null {
+    const oc = this.store.onCallByDate().get(date);
+    return oc?.missions.length ? oc : null;
+  }
+
+  /** « 2h30 » (infobulle d'astreinte). */
   protected hours(minutes: number): string {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
@@ -275,18 +216,22 @@ export class CalendarGrid {
   onClick(d: DayCell, e: MouseEvent): void {
     // Avec un pinceau, l'application se fait au pointerdown ; le clic ne sert qu'au mode « détail ».
     if (this.store.brush() && this.store.editable()) return;
-    this.openPopover(d, e.currentTarget as HTMLElement);
+    this.openDay(d.date);
   }
 
-  private openPopover(d: DayCell, el: HTMLElement): void {
-    this.popoverOrigin.set(el);
-    this.popoverDate.set(d.date);
-  }
-
-  closePopover(): void {
-    const date = this.popoverDate();
-    this.popoverDate.set(null);
-    if (date) this.focusCell(date);
+  /** Modale du jour : activités, astreinte et interventions. */
+  openDay(date: string): void {
+    this.openDate.set(date);
+    const ref = this.dialog.open<void, DayDialogData>(DayDialog, {
+      data: { date },
+      injector: this.injector, // le store de la page (fourni par le composant parent)
+      ariaLabelledBy: 'jour-titre',
+      autoFocus: 'first-tabbable',
+    });
+    ref.closed.subscribe(() => {
+      this.openDate.set(null);
+      this.focusCell(date);
+    });
   }
 
   // ------------------------------------------------------------ clavier
@@ -303,8 +248,9 @@ export class CalendarGrid {
       this.focusCell((e.key === 'Home' ? days[0] : days[days.length - 1]).date);
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      if (this.store.brush() && this.store.editable()) this.store.applyAt(d.date);
-      else this.openPopover(d, e.currentTarget as HTMLElement);
+      // Maj+Entrée : modale du jour même avec un pinceau (équivalent clavier du bouton « + » de la case).
+      if (this.store.brush() && this.store.editable() && !e.shiftKey) this.store.applyAt(d.date);
+      else this.openDay(d.date);
     }
   }
 
