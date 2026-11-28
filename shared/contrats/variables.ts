@@ -149,7 +149,7 @@ export function sampleContractData(date: string): ContractData {
     },
     client: {
       id: 'exemple', name: 'Société Exemple SA', siret: '11111111111111', address: '10 rue du Client', postalCode: '69002', city: 'Lyon',
-      representativeName: 'Dominique Durand', representativeRole: 'Directeur des achats', contractEmail: 'contrats@exemple.fr',
+      representativeName: 'Dominique Durand', representativeRole: 'Directeur des achats', contractEmail: 'contrats@exemple.fr', vatNumber: null, invoiceEmail: null
     },
     consultant: { name: 'Alex Consultant', email: 'alex@exemple.fr', qualification: 'Architecte logiciel' },
     mission: {
@@ -157,7 +157,7 @@ export function sampleContractData(date: string): ContractData {
       startDate: date, endDate: null, tjm: 650, clientValidation: true, validatorName: 'Claude Valideur', validatorEmail: 'valideur@exemple.fr', onCall: false, active: true,
       weekendPolicy: null, holidayPolicy: null, workedHolidays: null, holidayRegion: null,
       purpose: 'Accompagnement à la refonte du système d’information', location: 'Lyon, deux jours de télétravail par semaine',
-      terms: null, paymentTermsDays: 30, activities: [],
+      terms: null, paymentTermsDays: 30, purchaseOrder: null, onCallDailyRate: null, onCallHourlyRate: null, onCallNightPct: null, onCallWeekendPct: null, activities: [],
     },
     date,
   });

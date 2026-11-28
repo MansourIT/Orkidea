@@ -259,9 +259,17 @@ const ClientFields = {
   representativeName: optText(120),
   representativeRole: optText(80),
   contractEmail: EmailSchema.nullable().optional(),
+  vatNumber: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{2}[0-9A-Z]{2,13}$/, 'N° de TVA invalide (ex. FR12345678901)')
+    .nullable()
+    .optional(),
+  invoiceEmail: EmailSchema.nullable().optional(),
 };
 const CLIENT_COLUMNS = `id, name, siret, address, postal_code AS postalCode, city, representative_name AS representativeName,
-  representative_role AS representativeRole, contract_email AS contractEmail`;
+  representative_role AS representativeRole, contract_email AS contractEmail, vat_number AS vatNumber, invoice_email AS invoiceEmail`;
 
 async function getClient(db: D1Database, id: string): Promise<Client> {
   const row = await db.prepare(`SELECT ${CLIENT_COLUMNS} FROM clients WHERE id = ?`).bind(id).first<Client>();
@@ -270,18 +278,18 @@ async function getClient(db: D1Database, id: string): Promise<Client> {
 }
 
 function clientWrite(db: D1Database, id: string, cl: Client, insert: boolean): D1PreparedStatement {
-  const values = [cl.name, cl.siret, cl.address, cl.postalCode, cl.city, cl.representativeName, cl.representativeRole, cl.contractEmail];
+  const values = [cl.name, cl.siret, cl.address, cl.postalCode, cl.city, cl.representativeName, cl.representativeRole, cl.contractEmail, cl.vatNumber, cl.invoiceEmail];
   return insert
     ? db
         .prepare(
-          `INSERT INTO clients (id, name, siret, address, postal_code, city, representative_name, representative_role, contract_email)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO clients (id, name, siret, address, postal_code, city, representative_name, representative_role, contract_email, vat_number, invoice_email)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(id, ...values)
     : db
         .prepare(
           `UPDATE clients SET name = ?, siret = ?, address = ?, postal_code = ?, city = ?, representative_name = ?, representative_role = ?,
-                  contract_email = ? WHERE id = ?`,
+                  contract_email = ?, vat_number = ?, invoice_email = ? WHERE id = ?`,
         )
         .bind(...values, id);
 }
@@ -316,6 +324,8 @@ adminRoutes.openapi(
       representativeName: b.representativeName ?? null,
       representativeRole: b.representativeRole ?? null,
       contractEmail: b.contractEmail ?? null,
+      vatNumber: b.vatNumber ?? null,
+      invoiceEmail: b.invoiceEmail ?? null,
     };
     await clientWrite(c.env.DB, id, client, true).run();
     return c.json({ id }, 201);
@@ -361,7 +371,14 @@ const MissionFields = {
   location: optText(200),
   terms: optText(2000),
   paymentTermsDays: z.number().int().min(0).max(60, 'Délai de paiement : 60 jours au plus').nullable().optional(),
+  purchaseOrder: optText(80),
+  onCallDailyRate: z.number().min(0).max(100_000).nullable().optional(),
+  onCallHourlyRate: z.number().min(0).max(10_000).nullable().optional(),
+  onCallNightPct: z.number().min(0).max(300).nullable().optional(),
+  onCallWeekendPct: z.number().min(0).max(300).nullable().optional(),
 };
+const BILLING_FIELDS = ['purchaseOrder', 'onCallDailyRate', 'onCallHourlyRate', 'onCallNightPct', 'onCallWeekendPct'] as const;
+const BILLING_COLUMNS = ['purchase_order', 'on_call_daily_rate', 'on_call_hourly_rate', 'on_call_night_pct', 'on_call_weekend_pct'];
 
 const MissionCreate = z.object({
   consultantId: IdSchema,
@@ -388,6 +405,11 @@ const MissionPatch = z.object({
   location: MissionFields.location,
   terms: MissionFields.terms,
   paymentTermsDays: MissionFields.paymentTermsDays,
+  purchaseOrder: MissionFields.purchaseOrder,
+  onCallDailyRate: MissionFields.onCallDailyRate,
+  onCallHourlyRate: MissionFields.onCallHourlyRate,
+  onCallNightPct: MissionFields.onCallNightPct,
+  onCallWeekendPct: MissionFields.onCallWeekendPct,
   active: z.boolean().optional(),
   color: ColorSchema.optional(),
   addActivities: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
@@ -457,6 +479,10 @@ adminRoutes.openapi(
         b.paymentTermsDays ?? null,
         b.onCall ? 1 : 0,
       ),
+      c.env.DB.prepare(`UPDATE missions SET ${BILLING_COLUMNS.map((col) => `${col} = ?`).join(', ')} WHERE id = ?`).bind(
+        ...BILLING_FIELDS.map((f) => b[f] ?? null),
+        id,
+      ),
       ...(await svc.codedActivities(c.env.DB, null, labels)).map(({ label, code }) => svc.newActivityStmt(c.env.DB, id, label, color, code)),
     ]);
     return c.json({ id }, 201);
@@ -523,6 +549,12 @@ adminRoutes.openapi(
         id,
       ),
     ];
+    stmts.push(
+      c.env.DB.prepare(`UPDATE missions SET ${BILLING_COLUMNS.map((col) => `${col} = ?`).join(', ')} WHERE id = ?`).bind(
+        ...BILLING_FIELDS.map((f) => (b[f] === undefined ? m[f] : b[f])),
+        id,
+      ),
+    );
     if (b.color) stmts.push(c.env.DB.prepare('UPDATE activities SET color = ? WHERE mission_id = ?').bind(b.color, id));
     const color = b.color ?? m.activities[0]?.color ?? '#3B82F6';
     for (const { label, code } of await svc.codedActivities(c.env.DB, id, b.addActivities ?? [])) stmts.push(svc.newActivityStmt(c.env.DB, id, label, color, code));

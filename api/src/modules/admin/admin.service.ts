@@ -243,6 +243,11 @@ interface MissionDbRow {
   worked_holidays: string | null;
   holiday_region: Mission['holidayRegion'];
   on_call: number;
+  purchase_order: string | null;
+  on_call_daily_rate: number | null;
+  on_call_hourly_rate: number | null;
+  on_call_night_pct: number | null;
+  on_call_weekend_pct: number | null;
   purpose: string | null;
   location: string | null;
   terms: string | null;
@@ -275,6 +280,11 @@ export async function listMissions(db: D1Database, id?: string): Promise<Mission
     validatorName: m.validator_name,
     validatorEmail: m.validator_email,
     onCall: !!m.on_call,
+    purchaseOrder: m.purchase_order,
+    onCallDailyRate: m.on_call_daily_rate,
+    onCallHourlyRate: m.on_call_hourly_rate,
+    onCallNightPct: m.on_call_night_pct,
+    onCallWeekendPct: m.on_call_weekend_pct,
     purpose: m.purpose,
     location: m.location,
     terms: m.terms,

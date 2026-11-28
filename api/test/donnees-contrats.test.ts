@@ -55,6 +55,8 @@ describe('Données des contrats de prestation', () => {
       representativeName: 'Bill L.',
       representativeRole: 'Directeur',
       contractEmail: 'achats@initech.example',
+      vatNumber: null,
+      invoiceEmail: null,
     });
     expect(list.find((c) => c.id === 'c-alpha')?.representativeName).toBe('Sophie Bernard');
 
