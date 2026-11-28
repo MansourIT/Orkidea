@@ -11,6 +11,9 @@ import { Confirm } from '../../ui/confirm-dialog';
 import { Segmented, type SegmentOption } from '../../ui/segmented';
 import { ToggleSwitch } from '../../ui/toggle-switch';
 
+/** Champ numérique facultatif : vide → null. */
+const num = (v: number | null) => (v === null || (v as unknown) === '' ? null : Number(v));
+
 /** Si le contrat exige la validation client : nom et email du valideur obligatoires ; fin ≥ début. */
 function missionRules(group: AbstractControl): ValidationErrors | null {
   const v = group.getRawValue() as { clientValidation: boolean; validatorName: string; validatorEmail: string; startDate: string; endDate: string };
@@ -230,8 +233,33 @@ const REGION_OPTIONS: SegmentOption<Inherit<HolidayRegion>>[] = [
               </div>
               <p id="m-payment-aide" class="mt-1 text-xs" [class]="showCtl('paymentTermsDays') ? 'text-red-700' : 'text-ink-soft'">60 jours au plus après la date de facture.</p>
             </div>
+            <div>
+              <label for="m-po" class="label">Bon de commande client <span class="font-normal text-ink-soft">(facultatif)</span></label>
+              <input id="m-po" class="input" formControlName="purchaseOrder" maxlength="80" placeholder="Ex. : PO-2026-42" />
+              <p class="mt-1 text-xs text-ink-soft">Repris sur les factures.</p>
+            </div>
           </div>
         </section>
+
+        @if (onCall()) {
+          <!-- 6. Tarifs d'astreinte -->
+          <section aria-labelledby="sec-tarifs-astreinte">
+            <h3 id="sec-tarifs-astreinte" class="section-title"><span class="section-num">6</span> Tarifs d’astreinte</h3>
+            <p class="mb-3 text-xs text-ink-soft">Montants HT facturés au client. Laissez vide ce qui n’est pas facturé ; un forfait à 0 n’ajoute pas de ligne.</p>
+            <div class="grid gap-3 sm:grid-cols-2">
+              @for (f of rateFields; track f.control) {
+                <div>
+                  <label [for]="'m-' + f.control" class="label">{{ f.label }}</label>
+                  <div class="relative">
+                    <input [id]="'m-' + f.control" type="number" min="0" step="any" class="input pr-12" [formControlName]="f.control" />
+                    <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-soft">{{ f.suffix }}</span>
+                  </div>
+                </div>
+              }
+            </div>
+            <p class="mt-2 text-xs text-ink-soft">Nuit : 21 h → 6 h. Week-end et férié : selon le jour de début de l’intervention, une seule majoration de ce type.</p>
+          </section>
+        }
       </div>
 
       <footer class="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-3">
@@ -269,6 +297,12 @@ export class MissionForm implements OnInit {
   protected readonly colors = MISSION_COLORS;
   protected readonly policyOptions = POLICY_OPTIONS;
   protected readonly regionOptions = REGION_OPTIONS;
+  protected readonly rateFields = [
+    { control: 'onCallDailyRate', label: 'Forfait d’astreinte par jour', suffix: '€' },
+    { control: 'onCallHourlyRate', label: 'Taux horaire des interventions', suffix: '€/h' },
+    { control: 'onCallNightPct', label: 'Majoration nuit', suffix: '%' },
+    { control: 'onCallWeekendPct', label: 'Majoration week-end / férié', suffix: '%' },
+  ] as const;
   protected readonly newActivities = signal<string[]>([]);
   protected readonly worked = signal<HolidayCode[]>([]);
   protected readonly submitted = signal(false);
@@ -296,6 +330,11 @@ export class MissionForm implements OnInit {
       location: ['', Validators.maxLength(200)],
       terms: ['', Validators.maxLength(2000)],
       paymentTermsDays: [null as number | null, [Validators.min(0), Validators.max(60)]],
+      purchaseOrder: ['', Validators.maxLength(80)],
+      onCallDailyRate: [null as number | null, Validators.min(0)],
+      onCallHourlyRate: [null as number | null, Validators.min(0)],
+      onCallNightPct: [null as number | null, [Validators.min(0), Validators.max(300)]],
+      onCallWeekendPct: [null as number | null, [Validators.min(0), Validators.max(300)]],
     },
     { validators: missionRules },
   );
@@ -343,6 +382,11 @@ export class MissionForm implements OnInit {
         location: m.location ?? '',
         terms: m.terms ?? '',
         paymentTermsDays: m.paymentTermsDays,
+        purchaseOrder: m.purchaseOrder ?? '',
+        onCallDailyRate: m.onCallDailyRate,
+        onCallHourlyRate: m.onCallHourlyRate,
+        onCallNightPct: m.onCallNightPct,
+        onCallWeekendPct: m.onCallWeekendPct,
       });
       this.worked.set(m.workedHolidays ?? []);
     } else {
@@ -393,6 +437,11 @@ export class MissionForm implements OnInit {
       location: v.location.trim() || null,
       terms: v.terms.trim() || null,
       paymentTermsDays: v.paymentTermsDays === null || (v.paymentTermsDays as unknown) === '' ? null : Number(v.paymentTermsDays),
+      purchaseOrder: v.purchaseOrder.trim() || null,
+      onCallDailyRate: num(v.onCallDailyRate),
+      onCallHourlyRate: num(v.onCallHourlyRate),
+      onCallNightPct: num(v.onCallNightPct),
+      onCallWeekendPct: num(v.onCallWeekendPct),
     };
   }
 

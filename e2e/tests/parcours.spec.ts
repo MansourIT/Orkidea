@@ -149,4 +149,38 @@ test.describe.serial('Cycle de vie d’un CRA', () => {
     await expect(badge()).toHaveText(STATUS_LABELS.CLOTURE);
     await expect(consultant.getByText('CRA clôturé par Orkidea')).toBeVisible();
   });
+
+  test('admin : facture du mois clôturé, émission, PDF et paiement', async ({ browser }) => {
+    const admin = await (await browser.newContext({ storageState: adminState })).newPage();
+    // Mentions obligatoires du vendeur (le client Alpha a déjà SIRET et adresse dans les données de démo).
+    const company = await (await admin.request.get('/api/admin/company')).json();
+    expect((await admin.request.put('/api/admin/company', { data: { ...company, siret: '98765432100019', vatNumber: 'FR12987654321', address: '1 avenue des Orchidées', postalCode: '75008', city: 'Paris' } })).ok()).toBe(true);
+    const invoicing = await (await admin.request.get('/api/admin/invoices/settings')).json();
+    expect((await admin.request.put('/api/admin/invoices/settings', { data: { ...invoicing, iban: 'FR7630006000011234567890189' } })).ok()).toBe(true);
+
+    await admin.goto('/admin?onglet=factures');
+    await admin.getByLabel('Mois facturé').fill(month);
+    await admin.getByLabel('Mois facturé').dispatchEvent('change');
+    const row = admin.getByRole('listitem').filter({ hasText: 'Client Alpha · Projet Alpha' });
+    await expect(row).toContainText('2\u202f200,00\u00a0€ HT'); // 4 j × 550 €
+    await row.getByRole('button', { name: 'Créer la facture' }).click();
+    await admin.waitForURL(/\/admin\/factures\//);
+    await expect(admin.getByRole('heading', { name: 'Facture en brouillon' })).toBeVisible();
+    await expect(admin.getByText('2\u202f640,00\u00a0€').first()).toBeVisible(); // TTC
+
+    await admin.getByRole('button', { name: 'Émettre' }).click();
+    await admin.getByRole('alertdialog').getByRole('button', { name: 'Émettre' }).click();
+    const heading = admin.getByRole('heading', { name: /^Facture FA-\d{4}-0001$/ });
+    await expect(heading).toBeVisible();
+    const download = admin.waitForEvent('download');
+    await admin.getByRole('link', { name: 'PDF' }).click();
+    expect((await download).suggestedFilename()).toMatch(/^FA-\d{4}-0001\.pdf$/);
+
+    await admin.getByRole('button', { name: 'Paiement reçu' }).click();
+    await admin.getByRole('alertdialog').getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(admin.getByText('Payée', { exact: true }).first()).toBeVisible();
+
+    await admin.getByRole('link', { name: 'Factures' }).click();
+    await expect(admin.getByRole('row').filter({ hasText: 'FA-' })).toContainText('Payée');
+  });
 });

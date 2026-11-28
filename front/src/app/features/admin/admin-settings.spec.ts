@@ -5,6 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { provideIcons } from '@ng-icons/core';
 import { DEFAULT_COMPANY } from '@shared/company';
+import { DEFAULT_INVOICE_SETTINGS } from '@shared/factures';
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/settings';
 import { Confirm } from '../../ui/confirm-dialog';
 import { APP_ICONS } from '../../ui/icons';
@@ -35,6 +36,7 @@ describe('Paramètres', () => {
     await tick();
     await f.whenStable();
     http.expectOne('/api/admin/company').flush(DEFAULT_COMPANY);
+    http.expectOne('/api/admin/invoices/settings').flush(DEFAULT_INVOICE_SETTINGS);
     await tick();
     await f.whenStable();
     return { f, el: f.nativeElement as HTMLElement };
@@ -130,6 +132,7 @@ describe('Paramètres', () => {
     await tick();
     await f.whenStable();
     http.expectOne('/api/admin/company').flush(DEFAULT_COMPANY);
+    http.expectOne('/api/admin/invoices/settings').flush(DEFAULT_INVOICE_SETTINGS);
     await tick();
     await f.whenStable();
     const el = f.nativeElement as HTMLElement;
