@@ -1,32 +1,34 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { NgIcon } from '@ng-icons/core';
 import { formatMinutes, interventionMinutes, type Intervention } from '@shared/astreintes';
-import { ToggleSwitch } from '../../ui/toggle-switch';
 import { TimesheetStore } from './timesheet.store';
 
 /** Astreinte d'un jour (dans le détail du jour) : une ligne par mission ouverte, interventions et ajout. */
 @Component({
   selector: 'app-on-call-editor',
-  imports: [NgIcon, ToggleSwitch],
+  imports: [NgIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="mt-3 border-t border-slate-100 pt-3" aria-label="Astreinte">
+    <section class="mt-5 border-t border-slate-100 pt-4" aria-labelledby="astreinte-titre">
+      <h3 id="astreinte-titre" class="mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-ink-soft uppercase">
+        <ng-icon name="lucideSiren" size="14" class="text-red-600" aria-hidden="true" /> Astreinte
+      </h3>
       @for (m of missions(); track m.id) {
         @let on = store.isOnCall(date(), m.id);
-        <div class="mb-2">
-          <div class="flex items-center gap-2">
-            <ng-icon name="lucideSiren" size="14" [class]="on ? 'text-red-600' : 'text-ink-soft'" aria-hidden="true" />
-            <span class="min-w-0 flex-1 truncate text-sm font-medium">Astreinte · {{ m.label }}</span>
-            @if (store.editable()) {
-              <app-switch [label]="'Astreinte ' + m.label + ' ce jour'" [checked]="on" (checkedChange)="store.toggleOnCall(date(), m.id)" />
-            } @else {
-              <span class="text-xs text-ink-soft">{{ on ? 'Oui' : 'Non' }}</span>
-            }
-          </div>
-          @if (on) {
-            <ul class="mt-1.5 space-y-1 pl-5">
+        @if (on) {
+          <div class="mb-2 rounded-xl border border-red-100 bg-red-50/50 p-3">
+            <div class="flex items-center gap-2">
+              <span class="rounded bg-red-600 px-1 font-mono text-[10px] font-bold leading-4 text-white">AST</span>
+              <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ m.label }}</span>
+              @if (store.editable()) {
+                <button type="button" class="btn-ghost px-2 py-1 text-xs text-red-700" (click)="store.toggleOnCall(date(), m.id)" [attr.aria-label]="'Retirer l’astreinte ' + m.label">
+                  <ng-icon name="lucideTrash2" size="13" aria-hidden="true" /> Retirer
+                </button>
+              }
+            </div>
+            <ul class="mt-2 space-y-1">
               @for (i of byMission(m.id); track $index) {
-                <li class="flex items-center gap-2 rounded-md bg-red-50/60 px-2 py-1 text-xs">
+                <li class="flex items-center gap-2 rounded-md bg-white px-2 py-1 text-xs">
                   <span class="font-mono font-medium">{{ i.start }}–{{ i.end }}</span>
                   <span class="text-ink-soft">{{ duration(i) }}</span>
                   <span class="min-w-0 flex-1 truncate" [title]="i.reason ?? ''">{{ i.reason }}</span>
@@ -37,23 +39,30 @@ import { TimesheetStore } from './timesheet.store';
                   }
                 </li>
               } @empty {
-                <li class="text-xs text-ink-soft">Aucune intervention.</li>
+                <li class="text-xs text-ink-soft">Astreinte sans intervention.</li>
               }
             </ul>
-          }
-        </div>
+          </div>
+        } @else if (store.editable()) {
+          <button type="button" class="mb-2 flex w-full items-center gap-2 rounded-xl border border-dashed border-red-200 px-3 py-2.5 text-left text-sm text-red-700 hover:bg-red-50"
+                  (click)="store.toggleOnCall(date(), m.id)">
+            <ng-icon name="lucidePlus" size="16" aria-hidden="true" /> Ajouter une astreinte <span class="truncate text-ink-soft">· {{ m.label }}</span>
+          </button>
+        } @else {
+          <p class="mb-2 text-xs text-ink-soft">Pas d’astreinte sur {{ m.label }}.</p>
+        }
       }
 
-      @if (store.editable() && missions().length) {
+      @if (store.editable() && onCallHere().length) {
         @if (!adding()) {
           <button type="button" class="btn-ghost mt-1 w-full justify-center border border-dashed border-slate-300 py-1.5 text-xs" (click)="startAdd()">
             <ng-icon name="lucidePlus" size="14" aria-hidden="true" /> Ajouter une intervention
           </button>
         } @else {
           <form class="mt-2 space-y-2 rounded-lg bg-slate-50 p-2.5" (submit)="$event.preventDefault(); add()" aria-label="Nouvelle intervention">
-            @if (missions().length > 1) {
+            @if (onCallHere().length > 1) {
               <select class="input py-1 text-xs" aria-label="Mission" [value]="missionId()" (change)="missionId.set($any($event.target).value)">
-                @for (m of missions(); track m.id) { <option [value]="m.id" [selected]="m.id === missionId()">{{ m.label }}</option> }
+                @for (m of onCallHere(); track m.id) { <option [value]="m.id" [selected]="m.id === missionId()">{{ m.label }}</option> }
               </select>
             }
             <div class="flex items-center gap-1.5">
@@ -82,6 +91,8 @@ export class OnCallEditor {
   protected readonly missions = computed(() =>
     this.store.onCallMissions().filter((m) => this.date() >= m.startDate && (!m.endDate || this.date() <= m.endDate)),
   );
+  /** Missions d'astreinte ce jour-là (on n'ajoute une intervention qu'à une astreinte déclarée). */
+  protected readonly onCallHere = computed(() => this.missions().filter((m) => this.store.isOnCall(this.date(), m.id)));
   protected readonly adding = signal(false);
   protected readonly missionId = signal('');
   protected readonly start = signal('');
@@ -104,7 +115,7 @@ export class OnCallEditor {
   }
 
   protected startAdd(): void {
-    this.missionId.set(this.missions()[0]?.id ?? '');
+    this.missionId.set(this.onCallHere()[0]?.id ?? '');
     this.start.set('');
     this.end.set('');
     this.reason.set('');

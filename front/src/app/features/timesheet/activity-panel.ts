@@ -112,7 +112,7 @@ import { TimesheetStore } from './timesheet.store';
           </p>
           @if (t.minutes) { <p class="mt-0.5 text-ink-soft">dont nuit {{ format(t.night) }} · week-end {{ format(t.weekend) }} · férié {{ format(t.holiday) }}</p> }
           @if (store.editable()) {
-            <p class="mt-1.5 text-ink-soft">Sans activité sélectionnée, cliquez sur un jour pour déclarer l’astreinte et ses interventions (week-ends et fériés compris).</p>
+            <p class="mt-1.5 text-ink-soft">Cliquez sur un jour pour ajouter une astreinte et ses interventions, week-ends et fériés compris (avec une activité sélectionnée : bouton « + » de la case). Les jours d’astreinte portent l’indicateur AST.</p>
           }
         </div>
       }
