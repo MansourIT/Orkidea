@@ -1,7 +1,9 @@
+import { activityCode, suggestActivityCode } from '../../../../shared/activity-code';
 import type { AdminTimesheetBoard, AdminTimesheetDetail, AdminTimesheetRow, Mission, TimesheetStatus, User } from '../../../../shared/types';
 import { STATUS_LABELS } from '../../../../shared/types';
 import { workingDays } from '../../../../shared/holidays';
 import { submissionDeadline } from '../../../../shared/submission';
+import { onCallTotals, type Intervention, type OnCallDay } from '../../../../shared/astreintes';
 import { auditStmt } from '../../core/audit';
 import { isoIn, nowIso } from '../../core/clock';
 import { newId, randomToken, sha256 } from '../../core/crypto';
@@ -91,17 +93,51 @@ export async function exportMonthCsv(ctx: ServiceCtx, month: string): Promise<st
     )
     .bind(month)
     .all<{ consultantId: string; kind: 'travail' | 'absence'; activity: string; mission: string | null; client: string | null; tjm: number | null; days: number }>();
-  const header = ['Mois', 'Consultant', 'Email', 'Statut', 'Soumis le', 'Type', 'Mission', 'Client', 'Activité', 'Jours', 'TJM (€ HT)', 'Montant indicatif (€ HT)'];
+  // Astreintes du mois, par consultant et par mission.
+  const [days, interventions] = await ctx.db.batch([
+    ctx.db
+      .prepare(
+        `SELECT t.consultant_id AS consultantId, d.date, d.mission_id AS missionId, m.label AS mission, cl.name AS client
+         FROM on_call_days d JOIN timesheets t ON t.id = d.timesheet_id JOIN missions m ON m.id = d.mission_id JOIN clients cl ON cl.id = m.client_id
+         WHERE t.month = ?`,
+      )
+      .bind(month),
+    ctx.db
+      .prepare(
+        `SELECT t.consultant_id AS consultantId, i.date, i.mission_id AS missionId, i.start_time AS start, i.end_time AS "end", i.reason
+         FROM interventions i JOIN timesheets t ON t.id = i.timesheet_id WHERE t.month = ?`,
+      )
+      .bind(month),
+  ]);
+  type DayRow = OnCallDay & { consultantId: string; mission: string; client: string };
+  const onCallRows = days.results as unknown as DayRow[];
+  const interventionRows = interventions.results as unknown as Array<Intervention & { consultantId: string }>;
+  const hours = (min: number) => Math.round((min / 60) * 100) / 100;
+  const header = [
+    'Mois', 'Consultant', 'Email', 'Statut', 'Soumis le', 'Type', 'Mission', 'Client', 'Activité', 'Jours', 'TJM (€ HT)', 'Montant indicatif (€ HT)',
+    'Interventions (h)', 'dont nuit (h)', 'dont week-end (h)', 'dont férié (h)',
+  ];
   const lines = [header.join(';')];
   for (const r of b.rows) {
     const status = r.status === 'NON_COMMENCE' ? 'Non commencé' : STATUS_LABELS[r.status];
     const submitted = r.submittedAt ? r.submittedAt.slice(0, 10).split('-').reverse().join('/') : '';
     const base = [month, r.consultant, r.consultantEmail, status, submitted];
     const mine = results.filter((x) => x.consultantId === r.consultantId);
-    if (!mine.length) lines.push([...base, '', '', '', '', 0, null, null].map(csvCell).join(';'));
+    if (!mine.length) lines.push([...base, '', '', '', '', 0, null, null, null, null, null, null].map(csvCell).join(';'));
     for (const x of mine) {
       const amount = x.kind === 'travail' && x.tjm !== null ? x.days * x.tjm : null;
-      lines.push([...base, x.kind === 'travail' ? 'Travail' : 'Absence', x.mission ?? '', x.client ?? '', x.activity, x.days, x.kind === 'travail' ? x.tjm : null, amount].map(csvCell).join(';'));
+      lines.push([...base, x.kind === 'travail' ? 'Travail' : 'Absence', x.mission ?? '', x.client ?? '', x.activity, x.days, x.kind === 'travail' ? x.tjm : null, amount, null, null, null, null].map(csvCell).join(';'));
+    }
+    const myDays = onCallRows.filter((d) => d.consultantId === r.consultantId);
+    const myInterventions = interventionRows.filter((i) => i.consultantId === r.consultantId);
+    for (const missionId of new Set(myDays.map((d) => d.missionId))) {
+      const first = myDays.find((d) => d.missionId === missionId)!;
+      const t = onCallTotals(myDays, myInterventions, ctx.settings.calendar.holidayRegion, missionId);
+      lines.push(
+        [...base, 'Astreinte', first.mission, first.client, 'Astreinte et interventions', t.days, null, null, hours(t.minutes), hours(t.night), hours(t.weekend), hours(t.holiday)]
+          .map(csvCell)
+          .join(';'),
+      );
     }
   }
   return '\uFEFF' + lines.join('\r\n') + '\r\n';
@@ -206,6 +242,7 @@ interface MissionDbRow {
   holiday_policy: Mission['holidayPolicy'];
   worked_holidays: string | null;
   holiday_region: Mission['holidayRegion'];
+  on_call: number;
   purpose: string | null;
   location: string | null;
   terms: string | null;
@@ -222,8 +259,8 @@ export async function listMissions(db: D1Database, id?: string): Promise<Mission
     .bind(...(id ? [id] : []))
     .all<MissionDbRow>();
   const { results: acts } = await db
-    .prepare(`SELECT id, mission_id, label, color, active FROM activities WHERE mission_id IS NOT NULL ORDER BY label`)
-    .all<{ id: string; mission_id: string; label: string; color: string; active: number }>();
+    .prepare(`SELECT id, mission_id, label, code, color, active FROM activities WHERE mission_id IS NOT NULL ORDER BY label`)
+    .all<{ id: string; mission_id: string; label: string; code: string | null; color: string; active: number }>();
   return results.map((m) => ({
     id: m.id,
     consultantId: m.consultant_id,
@@ -237,6 +274,7 @@ export async function listMissions(db: D1Database, id?: string): Promise<Mission
     clientValidation: !!m.client_validation,
     validatorName: m.validator_name,
     validatorEmail: m.validator_email,
+    onCall: !!m.on_call,
     purpose: m.purpose,
     location: m.location,
     terms: m.terms,
@@ -248,7 +286,7 @@ export async function listMissions(db: D1Database, id?: string): Promise<Mission
     holidayRegion: m.holiday_region,
     activities: acts
       .filter((a) => a.mission_id === m.id)
-      .map((a) => ({ id: a.id, label: a.label, color: a.color, active: !!a.active })),
+      .map((a) => ({ id: a.id, label: a.label, code: activityCode(a.code, a.label), color: a.color, active: !!a.active })),
   }));
 }
 
@@ -271,6 +309,27 @@ export async function emailTaken(db: D1Database, email: string, exceptId?: strin
   return !!row;
 }
 
-export function newActivityStmt(db: D1Database, missionId: string, label: string, color: string): D1PreparedStatement {
-  return db.prepare(`INSERT INTO activities (id, mission_id, label, kind, color) VALUES (?, ?, ?, 'travail', ?)`).bind(newId(), missionId, label, color);
+export function newActivityStmt(db: D1Database, missionId: string, label: string, color: string, code: string): D1PreparedStatement {
+  return db
+    .prepare(`INSERT INTO activities (id, mission_id, label, code, kind, color) VALUES (?, ?, ?, ?, 'travail', ?)`)
+    .bind(newId(), missionId, label, code, color);
+}
+
+/** Codes déjà pris : absences communes et activités de la mission (un code est unique dans ce périmètre). */
+export async function takenCodes(db: D1Database, missionId: string | null, exceptActivityId = ''): Promise<string[]> {
+  const { results } = await db
+    .prepare('SELECT label, code FROM activities WHERE (mission_id IS NULL OR mission_id = ?) AND id != ?')
+    .bind(missionId ?? '', exceptActivityId)
+    .all<{ label: string; code: string | null }>();
+  return results.map((r) => activityCode(r.code, r.label));
+}
+
+/** Codes attribués aux nouvelles activités d'une mission (uniques avec les absences et les activités existantes). */
+export async function codedActivities(db: D1Database, missionId: string | null, labels: string[]): Promise<Array<{ label: string; code: string }>> {
+  const taken = await takenCodes(db, missionId);
+  return labels.map((label) => {
+    const code = suggestActivityCode(label, taken);
+    taken.push(code);
+    return { label, code };
+  });
 }

@@ -1,3 +1,5 @@
+import { activityCode } from '../../../../shared/activity-code';
+import type { Intervention, OnCallDay, OnCallMission } from '../../../../shared/astreintes';
 import type { Activity, Entry, TimesheetStatus, TimesheetSummary, ValidationSummary } from '../../../../shared/types';
 import type { AppSettings, DayPolicy, MissionCalendarOverrides } from '../../../../shared/settings';
 import type { HolidayCode, HolidayRegion } from '../../../../shared/holidays';
@@ -59,6 +61,7 @@ interface ActivityDbRow {
   missionLabel: string | null;
   clientName: string | null;
   label: string;
+  code: string | null;
   kind: Activity['kind'];
   color: string;
   startDate: string | null;
@@ -70,7 +73,7 @@ interface ActivityDbRow {
 }
 
 const ACTIVITY_SELECT = `SELECT a.id, a.mission_id AS missionId, m.label AS missionLabel, cl.name AS clientName,
-       a.label, a.kind, a.color, m.start_date AS startDate, m.end_date AS endDate,
+       a.label, a.code, a.kind, a.color, m.start_date AS startDate, m.end_date AS endDate,
        m.weekend_policy AS weekendPolicy, m.holiday_policy AS holidayPolicy,
        m.worked_holidays AS workedHolidays, m.holiday_region AS holidayRegion
 FROM activities a
@@ -100,6 +103,7 @@ function toActivity(r: ActivityDbRow, settings: AppSettings, archived: boolean):
     missionLabel: r.missionLabel,
     clientName: r.clientName,
     label: r.label,
+    code: activityCode(r.code, r.label),
     kind: r.kind,
     color: r.color,
     startDate: r.startDate,
@@ -176,4 +180,33 @@ export async function listSummaries(
     });
   }
   return out;
+}
+
+/** Jours d'astreinte et interventions d'un CRA. */
+export async function loadOnCall(db: D1Database, timesheetId: string): Promise<{ onCall: OnCallDay[]; interventions: Intervention[] }> {
+  const [days, interventions] = await db.batch([
+    db.prepare('SELECT date, mission_id AS missionId FROM on_call_days WHERE timesheet_id = ? ORDER BY date').bind(timesheetId),
+    db
+      .prepare(
+        `SELECT date, mission_id AS missionId, start_time AS start, end_time AS "end", reason FROM interventions
+         WHERE timesheet_id = ? ORDER BY date, start_time`,
+      )
+      .bind(timesheetId),
+  ]);
+  return { onCall: days.results as unknown as OnCallDay[], interventions: interventions.results as unknown as Intervention[] };
+}
+
+/** Missions actives du consultant ouvertes à l'astreinte (et celles déjà présentes dans le CRA). */
+export async function listOnCallMissions(db: D1Database, userId: string, timesheetId?: string): Promise<OnCallMission[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT m.id, m.label, COALESCE((SELECT color FROM activities WHERE mission_id = m.id ORDER BY active DESC LIMIT 1), '#7C5CBF') AS color,
+              m.start_date AS startDate, m.end_date AS endDate
+       FROM missions m
+       WHERE m.consultant_id = ?1 AND ((m.on_call = 1 AND m.active = 1) OR m.id IN (SELECT mission_id FROM on_call_days WHERE timesheet_id = ?2))
+       ORDER BY m.label`,
+    )
+    .bind(userId, timesheetId ?? '')
+    .all<OnCallMission>();
+  return results;
 }

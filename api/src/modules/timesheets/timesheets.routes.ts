@@ -25,9 +25,15 @@ const EntrySchema = z.object({
   activityId: IdSchema,
   quantity: z.union([z.literal(0.5), z.literal(1)]),
 });
+const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Heure invalide (HH:MM)');
 const SaveBody = z.object({
   entries: z.array(EntrySchema).max(124, 'Trop de lignes de saisie'),
   comment: z.string().max(2000).nullable().optional(),
+  onCall: z.array(z.object({ date: DateSchema, missionId: IdSchema })).max(155).optional(),
+  interventions: z
+    .array(z.object({ date: DateSchema, missionId: IdSchema, start: TimeSchema, end: TimeSchema, reason: z.string().max(200).nullable() }))
+    .max(310)
+    .optional(),
 });
 
 timesheetRoutes.openapi(

@@ -19,6 +19,8 @@ beforeEach(async () => {
     [
       'DELETE FROM entries',
       'DELETE FROM validations',
+      'DELETE FROM interventions',
+      'DELETE FROM on_call_days',
       'DELETE FROM timesheets',
       'DELETE FROM contract_events',
       'DELETE FROM contracts',

@@ -1,9 +1,10 @@
 import { CdkConnectedOverlay, type ConnectedPosition } from '@angular/cdk/overlay';
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { NgIcon } from '@ng-icons/core';
 import type { Entry } from '@shared/types';
 import { WEEKDAY_NAMES } from '@shared/dates';
 import { formatDays } from '../../core/format';
+import { OnCallEditor } from './on-call-editor';
 import { type DayCell, TimesheetStore } from './timesheet.store';
 
 const HEADERS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
@@ -19,7 +20,7 @@ export const tint = (color: string, pct = 20) => `color-mix(in srgb, ${color} ${
  */
 @Component({
   selector: 'app-calendar-grid',
-  imports: [NgIcon, CdkConnectedOverlay],
+  imports: [NgIcon, CdkConnectedOverlay, OnCallEditor],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div
@@ -59,9 +60,16 @@ export const tint = (color: string, pct = 20) => `color-mix(in srgb, ${color} ${
                   (keydown)="onKeydown($event, d)"
                   (focus)="focused.set(d.date)"
                 >
+                  @if (store.onCallByDate().get(d.date); as oc) {
+                    @if (oc.missions.length) {
+                      <span class="absolute right-0.5 top-0.5 z-10 flex items-center gap-0.5 rounded bg-red-50 px-0.5 text-[9px] font-semibold leading-3 text-red-700 sm:right-1 sm:top-1 sm:text-[10px]" aria-hidden="true">
+                        <ng-icon name="lucideSiren" size="10" />@if (oc.minutes) { <span class="hidden sm:inline">{{ hours(oc.minutes) }}</span> }
+                      </span>
+                    }
+                  }
                   <span class="relative z-10 font-medium" [class.text-slate-400]="d.nonWorking && !d.entries.length">{{ d.day }}</span>
                   @if (d.entries.length) {
-                    <span class="relative z-10 text-[10px] font-semibold text-ink/70 sm:text-xs">{{ format(d.total) }}</span>
+                    <span class="relative z-10 max-w-full truncate px-0.5 font-mono text-[9px] font-semibold text-ink/80 sm:text-[11px]" aria-hidden="true">{{ codes(d) }}</span>
                   } @else if (d.holiday) {
                     <span class="relative z-10 hidden w-full truncate px-1 text-[10px] leading-tight text-slate-400 md:block">{{ d.holiday }}</span>
                   }
@@ -80,14 +88,16 @@ export const tint = (color: string, pct = 20) => `color-mix(in srgb, ${color} ${
       [cdkConnectedOverlayOrigin]="popoverOrigin()!"
       [cdkConnectedOverlayOpen]="!!popoverDay()"
       [cdkConnectedOverlayPositions]="positions"
+      [cdkConnectedOverlayPush]="true"
       [cdkConnectedOverlayHasBackdrop]="true"
       cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop"
       (backdropClick)="closePopover()"
+      (attach)="watchPopoverSize()"
       (detach)="closePopover()"
       (overlayKeydown)="$event.key === 'Escape' && closePopover()"
     >
       @if (popoverDay(); as d) {
-        <div class="w-72 rounded-xl border border-slate-200 bg-white p-4 shadow-lg" role="dialog" [attr.aria-label]="'Détail du ' + store.dayLabel(d)">
+        <div class="max-h-[calc(100dvh-1.5rem)] w-80 max-w-[92vw] overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-lg" role="dialog" [attr.aria-label]="'Détail du ' + store.dayLabel(d)">
           <div class="mb-3 flex items-start justify-between gap-2">
             <div>
               <p class="font-semibold capitalize">{{ weekday(d) }} {{ d.day }}</p>
@@ -117,6 +127,9 @@ export const tint = (color: string, pct = 20) => `color-mix(in srgb, ${color} ${
           @if (store.editable()) {
             <p class="mt-3 text-xs text-ink-soft">Sélectionnez une activité à gauche pour saisir ce jour.</p>
           }
+          @if (store.onCallMissions().length) {
+            <app-on-call-editor [date]="d.date" />
+          }
         </div>
       }
     </ng-template>
@@ -137,6 +150,22 @@ export class CalendarGrid {
     if (f && days.some((d) => d.date === f)) return f;
     return days.find((d) => d.isToday)?.date ?? days[0]?.date ?? null;
   });
+
+  private readonly overlayDir = viewChild(CdkConnectedOverlay);
+  private resizeObserver: ResizeObserver | null = null;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.resizeObserver?.disconnect());
+  }
+
+  /** Le détail du jour grandit (astreinte, formulaire d'intervention) : on le repositionne pour qu'il reste à l'écran. */
+  protected watchPopoverSize(): void {
+    const ref = this.overlayDir()?.overlayRef;
+    if (!ref || typeof ResizeObserver === 'undefined') return;
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = new ResizeObserver(() => ref.updatePosition());
+    this.resizeObserver.observe(ref.overlayElement);
+  }
 
   protected readonly popoverDate = signal<string | null>(null);
   protected readonly popoverOrigin = signal<HTMLElement | null>(null);
@@ -187,8 +216,22 @@ export class CalendarGrid {
     return a ? `color-mix(in srgb, ${this.color(a)} 65%, white)` : null;
   }
 
+  /** Codes des activités du jour (DEV, ou DEV·CP pour deux demi-journées). */
+  protected codes(d: DayCell): string {
+    return d.entries.map((e) => this.store.activityById().get(e.activityId)?.code ?? '?').join('·');
+  }
+
+  /** « 2h30 » (badge d'astreinte). */
+  protected hours(minutes: number): string {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
+  }
+
   protected tooltip(d: DayCell): string {
     const lines = d.entries.map((e) => `${this.store.activityName(e.activityId)} : ${formatDays(e.quantity)}`);
+    const oc = this.store.onCallByDate().get(d.date);
+    if (oc?.missions.length) lines.push(`Astreinte${oc.minutes ? ` · interventions ${this.hours(oc.minutes)}` : ''}`);
     if (d.holiday) lines.unshift(`Férié : ${d.holiday}`);
     const refusal = this.store.brush() ? this.store.refusals().get(d.date) : null;
     if (refusal) lines.push(refusal);

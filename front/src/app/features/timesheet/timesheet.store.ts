@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import type { Activity, ClientConfig, Entry, Timesheet } from '@shared/types';
+import type { Activity, ClientConfig, Entry, Intervention, OnCallDay, Timesheet } from '@shared/types';
+import { checkOnCall, interventionMinutes, onCallTotals } from '@shared/astreintes';
 import { EDITABLE_STATUSES } from '@shared/types';
 import { dayRefusal } from '@shared/calendar-rules';
 import { frDate, WEEKDAY_NAMES, MONTH_NAMES } from '@shared/dates';
@@ -24,8 +25,16 @@ export interface DayCell {
 
 export type LoadState = 'chargement' | 'pret' | 'erreur';
 
-const snapshot = (entries: readonly Entry[], comment: string | null) =>
-  JSON.stringify({ e: sortEntries(entries).map((x) => [x.date, x.activityId, x.quantity]), c: comment ?? '' });
+const sortOnCall = (days: readonly OnCallDay[]) => [...days].sort((a, b) => (a.date + a.missionId).localeCompare(b.date + b.missionId));
+const sortInterventions = (list: readonly Intervention[]) => [...list].sort((a, b) => (a.date + a.start + a.missionId).localeCompare(b.date + b.start + b.missionId));
+
+const snapshot = (entries: readonly Entry[], comment: string | null, onCall: readonly OnCallDay[] = [], interventions: readonly Intervention[] = []) =>
+  JSON.stringify({
+    e: sortEntries(entries).map((x) => [x.date, x.activityId, x.quantity]),
+    c: comment ?? '',
+    o: sortOnCall(onCall).map((d) => [d.date, d.missionId]),
+    i: sortInterventions(interventions).map((x) => [x.date, x.missionId, x.start, x.end, x.reason ?? '']),
+  });
 
 /** État de l'écran « Saisie des temps » : partagé par la vue calendrier et la vue tableau. */
 @Injectable()
@@ -41,6 +50,9 @@ export class TimesheetStore {
   readonly timesheet = signal<Timesheet | null>(null);
   readonly entries = signal<Entry[]>([]);
   readonly comment = signal<string | null>(null);
+  /** Jours d'astreinte et interventions du mois (brouillon local jusqu'à l'enregistrement). */
+  readonly onCall = signal<OnCallDay[]>([]);
+  readonly interventions = signal<Intervention[]>([]);
   private readonly saved = signal(snapshot([], null));
 
   readonly selectedId = signal<string | 'gomme' | null>(null);
@@ -58,7 +70,7 @@ export class TimesheetStore {
   // ------------------------------------------------------------ dérivés
   readonly status = computed(() => this.timesheet()?.status ?? 'BROUILLON');
   readonly editable = computed(() => !!this.timesheet() && EDITABLE_STATUSES.includes(this.status()));
-  readonly dirty = computed(() => snapshot(this.entries(), this.comment()) !== this.saved());
+  readonly dirty = computed(() => snapshot(this.entries(), this.comment(), this.onCall(), this.interventions()) !== this.saved());
   readonly region = computed(() => this.config()?.settings.calendar.holidayRegion ?? 'metropole');
   readonly today = computed(() => this.config()?.today ?? '');
 
@@ -106,6 +118,59 @@ export class TimesheetStore {
   });
 
   readonly totalDays = computed(() => dayTotal(this.entries()));
+
+  // ------------------------------------------------------------ astreintes
+  readonly onCallMissions = computed(() => this.timesheet()?.onCallMissions ?? []);
+  /** Par date : missions d'astreinte et minutes d'intervention. */
+  readonly onCallByDate = computed(() => {
+    const map = new Map<string, { missions: string[]; minutes: number }>();
+    const get = (date: string) => map.get(date) ?? map.set(date, { missions: [], minutes: 0 }).get(date)!;
+    for (const d of this.onCall()) get(d.date).missions.push(d.missionId);
+    for (const i of this.interventions()) get(i.date).minutes += interventionMinutes(i.start, i.end);
+    return map;
+  });
+  readonly onCallSummary = computed(() => onCallTotals(this.onCall(), this.interventions(), this.region()));
+
+  isOnCall(date: string, missionId: string): boolean {
+    return this.onCall().some((d) => d.date === date && d.missionId === missionId);
+  }
+
+  interventionsAt(date: string): Intervention[] {
+    return sortInterventions(this.interventions().filter((i) => i.date === date));
+  }
+
+  /** Active / retire l'astreinte d'une mission ce jour-là (retirer supprime aussi ses interventions). */
+  toggleOnCall(date: string, missionId: string): void {
+    if (!this.editable()) return;
+    if (this.isOnCall(date, missionId)) {
+      this.onCall.update((all) => all.filter((d) => !(d.date === date && d.missionId === missionId)));
+      this.interventions.update((all) => all.filter((i) => !(i.date === date && i.missionId === missionId)));
+    } else {
+      const err = checkOnCall(this.month(), [...this.onCall(), { date, missionId }], [], this.onCallMissions())[0];
+      if (err) {
+        this.notice.set({ text: err, tone: 'erreur' });
+        return;
+      }
+      this.onCall.update((all) => sortOnCall([...all, { date, missionId }]));
+    }
+  }
+
+  /** Ajoute une intervention (l'astreinte du jour est activée au besoin). Retourne l'erreur éventuelle. */
+  addIntervention(i: Intervention): string | null {
+    if (!this.editable()) return 'Ce CRA n’est plus modifiable';
+    const onCall = this.isOnCall(i.date, i.missionId) ? this.onCall() : [...this.onCall(), { date: i.date, missionId: i.missionId }];
+    const interventions = [...this.interventions(), { ...i, reason: i.reason?.trim() || null }];
+    const err = checkOnCall(this.month(), onCall, interventions, this.onCallMissions())[0];
+    if (err) return err;
+    this.onCall.set(sortOnCall(onCall));
+    this.interventions.set(sortInterventions(interventions));
+    return null;
+  }
+
+  removeIntervention(i: Intervention): void {
+    if (!this.editable()) return;
+    this.interventions.update((all) => all.filter((x) => x !== i));
+  }
   readonly workingDays = computed(() => this.timesheet()?.workingDays ?? this.days().filter((d) => !d.nonWorking).length);
   readonly missingDays = computed(() => (this.month() ? missingWorkingDays(this.month(), this.entries(), this.region()) : []));
 
@@ -153,7 +218,9 @@ export class TimesheetStore {
     this.timesheet.set(ts);
     this.entries.set(sortEntries(ts.entries));
     this.comment.set(ts.comment);
-    this.saved.set(snapshot(ts.entries, ts.comment));
+    this.onCall.set(sortOnCall(ts.onCall ?? []));
+    this.interventions.set(sortInterventions(ts.interventions ?? []));
+    this.saved.set(snapshot(ts.entries, ts.comment, ts.onCall ?? [], ts.interventions ?? []));
   }
 
   // ------------------------------------------------------------ pinceau
@@ -274,7 +341,7 @@ export class TimesheetStore {
     this.busy.set('enregistrement');
     this.serverErrors.set(null);
     try {
-      const ts = await this.api.saveTimesheet(this.month(), this.entries(), this.comment());
+      const ts = await this.api.saveTimesheet(this.month(), this.entries(), this.comment(), this.onCall(), this.interventions());
       this.applyServer(ts);
       this.notice.set({ text: 'Brouillon enregistré', tone: 'succes' });
       return true;

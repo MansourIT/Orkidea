@@ -2,6 +2,7 @@ import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NgIcon } from '@ng-icons/core';
+import { formatMinutes, onCallTotals } from '@shared/astreintes';
 import type { Activity, AdminTimesheetDetail, Entry, TimesheetEvent } from '@shared/types';
 import { monthDays } from '@shared/holidays';
 import { Api, apiError } from '../../core/api';
@@ -46,6 +47,13 @@ export interface DrawerData {
             <div class="rounded-xl bg-amber-50 p-3"><dt class="text-xs text-ink-soft">Absences</dt><dd class="text-lg font-bold text-amber-800">{{ fmt(absent()) }}</dd></div>
             <div class="rounded-xl bg-slate-50 p-3"><dt class="text-xs text-ink-soft">Jours ouvrés</dt><dd class="text-lg font-bold text-ink">{{ d.timesheet.workingDays }} j</dd></div>
           </dl>
+          @if (onCall(); as t) {
+            <p class="mt-3 flex flex-wrap items-center gap-x-2 rounded-xl bg-red-50/60 px-3 py-2 text-xs">
+              <ng-icon name="lucideSiren" size="14" class="text-red-600" aria-hidden="true" />
+              <span><span class="font-semibold">{{ t.days }}</span> jour{{ t.days > 1 ? 's' : '' }} d’astreinte · <span class="font-semibold">{{ minutes(t.minutes) }}</span> d’intervention</span>
+              @if (t.minutes) { <span class="text-ink-soft">(nuit {{ minutes(t.night) }} · week-end {{ minutes(t.weekend) }} · férié {{ minutes(t.holiday) }})</span> }
+            </p>
+          }
 
           <!-- Calendrier en lecture seule -->
           <h3 class="mt-6 mb-2 text-sm font-semibold">Calendrier</h3>
@@ -157,6 +165,12 @@ export class TimesheetDrawer implements OnInit {
   private readonly byId = computed(() => new Map((this.detail()?.activities ?? []).map((a) => [a.id, a])));
   private readonly kindOf = (e: Entry) => this.byId().get(e.activityId)?.kind;
   protected readonly worked = computed(() => (this.detail()?.timesheet.entries ?? []).filter((e) => this.kindOf(e) !== 'absence').reduce((s, e) => s + e.quantity, 0));
+  protected readonly minutes = formatMinutes;
+  /** Totaux d'astreinte (null s'il n'y en a pas). */
+  protected readonly onCall = computed(() => {
+    const ts = this.detail()?.timesheet;
+    return ts?.onCall.length ? onCallTotals(ts.onCall, ts.interventions, 'metropole') : null;
+  });
   protected readonly absent = computed(() => (this.detail()?.timesheet.entries ?? []).filter((e) => this.kindOf(e) === 'absence').reduce((s, e) => s + e.quantity, 0));
 
   protected readonly totals = computed(() => {
@@ -189,7 +203,7 @@ export class TimesheetDrawer implements OnInit {
   }
 
   private activity(id: string): Activity {
-    return this.byId().get(id) ?? { id, missionId: null, missionLabel: null, clientName: null, label: 'Activité inconnue', kind: 'travail', color: '#9AA0A6', startDate: null, endDate: null, rules: { weekend: 'INTERDIT', holidays: 'INTERDIT', workedHolidays: [], region: 'metropole' } };
+    return this.byId().get(id) ?? { id, missionId: null, missionLabel: null, clientName: null, label: 'Activité inconnue', code: '?', kind: 'travail', color: '#9AA0A6', startDate: null, endDate: null, rules: { weekend: 'INTERDIT', holidays: 'INTERDIT', workedHolidays: [], region: 'metropole' } };
   }
 
   private name(id: string): string {

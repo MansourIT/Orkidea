@@ -25,6 +25,8 @@ import {
   lucideSend,
   lucideSettings,
   lucideShield,
+  lucideSiren,
+  lucideTrash2,
   lucideUsers,
   lucideX,
 } from '@ng-icons/lucide';
@@ -57,6 +59,8 @@ export const APP_ICONS = {
   lucideSend,
   lucideSettings,
   lucideShield,
+  lucideSiren,
+  lucideTrash2,
   lucideUsers,
   lucideX,
 };

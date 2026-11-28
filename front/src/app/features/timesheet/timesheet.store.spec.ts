@@ -115,7 +115,7 @@ describe('TimesheetStore', () => {
     store.setComment('RAS');
     const saving = store.save();
     const req = http.expectOne({ method: 'PUT', url: `/api/timesheets/${MONTH}` });
-    expect(req.request.body).toEqual({ entries: [{ date: '2026-11-02', activityId: 'a-alpha-dev', quantity: 1 }], comment: 'RAS' });
+    expect(req.request.body).toEqual({ entries: [{ date: '2026-11-02', activityId: 'a-alpha-dev', quantity: 1 }], comment: 'RAS', onCall: [], interventions: [] });
     req.flush(timesheet({ entries: req.request.body.entries, comment: 'RAS' }));
     expect(await saving).toBe(true);
     expect(store.dirty()).toBe(false);
@@ -159,5 +159,24 @@ describe('TimesheetStore', () => {
     expect(store.dayLabel(store.days()[2])).toBe('mardi 3 novembre : Projet Alpha Développement, 1 jour');
     expect(store.dayLabel(store.days()[10])).toBe('mercredi 11 novembre : férié (Armistice 1918)');
     expect(store.subtitleDays()).toBe('17 j saisis / 20 j ouvrés');
+  });
+
+  it('astreintes : activation, intervention (astreinte ajoutée au besoin), contrôles, totaux, modifications en attente', async () => {
+    await load(timesheet({ onCallMissions: [{ id: 'm-alpha', label: 'Projet Alpha', color: '#3B82F6', startDate: '2026-01-01', endDate: null }] }));
+    expect(store.dirty()).toBe(false);
+    // Samedi : l'astreinte est permise même si la mission interdit le travail le week-end.
+    expect(store.addIntervention({ date: '2026-11-07', missionId: 'm-alpha', start: '22:30', end: '01:15', reason: ' INC-42 ' })).toBeNull();
+    expect(store.isOnCall('2026-11-07', 'm-alpha')).toBe(true);
+    expect(store.interventionsAt('2026-11-07')).toEqual([{ date: '2026-11-07', missionId: 'm-alpha', start: '22:30', end: '01:15', reason: 'INC-42' }]);
+    expect(store.addIntervention({ date: '2026-11-08', missionId: 'm-alpha', start: '00:30', end: '02:00', reason: null })).toBe('Interventions qui se chevauchent le 2026-11-08');
+    expect(store.onCallByDate().get('2026-11-07')).toEqual({ missions: ['m-alpha'], minutes: 165 });
+    expect(store.onCallSummary()).toMatchObject({ days: 1, minutes: 165, night: 165, weekend: 165 });
+    expect(store.dirty()).toBe(true);
+    // Retirer l'astreinte supprime ses interventions.
+    store.toggleOnCall('2026-11-07', 'm-alpha');
+    expect(store.interventions()).toEqual([]);
+    expect(store.dirty()).toBe(false);
+    store.toggleOnCall('2026-11-02', 'm-inconnue');
+    expect(store.notice()?.text).toBe('Astreinte non prévue pour cette mission le 2026-11-02');
   });
 });

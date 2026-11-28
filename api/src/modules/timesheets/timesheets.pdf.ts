@@ -1,7 +1,8 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { Activity, Timesheet } from '../../../../shared/types';
 import { STATUS_LABELS } from '../../../../shared/types';
-import { monthDays } from '../../../../shared/holidays';
+import { monthDays, type HolidayRegion } from '../../../../shared/holidays';
+import { formatMinutes, interventionMinutes, onCallTotals } from '../../../../shared/astreintes';
 
 const ORCHID = rgb(0.486, 0.361, 0.749); // #7C5CBF
 const INK = rgb(0.106, 0.137, 0.251); // #1B2340
@@ -53,8 +54,9 @@ function fmtDays(n: number): string {
   return n.toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + (n > 1 ? ' jours' : ' jour');
 }
 
-export async function renderTimesheetPdf(input: { consultant: string; timesheet: Timesheet; activities: Activity[] }): Promise<Uint8Array> {
+export async function renderTimesheetPdf(input: { consultant: string; timesheet: Timesheet; activities: Activity[]; region?: HolidayRegion }): Promise<Uint8Array> {
   const { consultant, timesheet: ts, activities } = input;
+  const region = input.region ?? 'metropole';
   const doc = await PDFDocument.create();
   doc.setTitle(`CRA ${ts.month} – ${consultant}`);
   doc.setAuthor('Orkidea');
@@ -136,6 +138,45 @@ export async function renderTimesheetPdf(input: { consultant: string; timesheet:
     y -= 14;
   }
   y -= 10;
+
+  // Astreintes et interventions
+  if (ts.onCall.length || ts.interventions.length) {
+    const missionLabel = new Map(ts.onCallMissions.map((m) => [m.id, m.label]));
+    const t = onCallTotals(ts.onCall, ts.interventions, region);
+    ensure(60);
+    text('Astreintes', M, 12, bold, ORCHID);
+    y -= 18;
+    text(`Jours d’astreinte : ${t.days}`, M, 10, bold);
+    text(`Interventions : ${formatMinutes(t.minutes)}`, 200, 10, bold);
+    text(`dont nuit ${formatMinutes(t.night)} · week-end ${formatMinutes(t.weekend)} · férié ${formatMinutes(t.holiday)}`, 330, 9, font, GREY);
+    y -= 18;
+    text('Date', M, 9, bold, GREY);
+    text('Mission', 160, 9, bold, GREY);
+    text('Intervention', 300, 9, bold, GREY);
+    text('Durée', 480, 9, bold, GREY);
+    y -= 14;
+    const rows = [
+      ...ts.onCall.map((d) => ({ date: d.date, missionId: d.missionId, detail: 'Astreinte', duration: '', key: `${d.date}0` })),
+      ...ts.interventions.map((i) => ({
+        date: i.date,
+        missionId: i.missionId,
+        detail: `${i.start} – ${i.end}${i.reason ? ` · ${i.reason}` : ''}`,
+        duration: formatMinutes(interventionMinutes(i.start, i.end)),
+        key: `${i.date}1${i.start}`,
+      })),
+    ].sort((x, z) => x.key.localeCompare(z.key));
+    for (const r of rows) {
+      ensure(14);
+      const d = days.get(r.date);
+      rule();
+      text(`${WEEKDAYS[d?.weekday ?? 0]} ${r.date.split('-').reverse().join('/')}`, M, 9.5);
+      text(fit(missionLabel.get(r.missionId) ?? r.missionId, 130, font, 9.5), 160, 9.5);
+      text(fit(r.detail, 170, font, 9.5), 300, 9.5, font, r.duration ? INK : GREY);
+      text(r.duration, 480, 9.5);
+      y -= 14;
+    }
+    y -= 10;
+  }
 
   // Validations client
   if (ts.validations.length) {

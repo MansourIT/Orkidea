@@ -12,6 +12,7 @@
   },
   "scripts": {
     "ensure-assets": "node scripts/ensure-assets.mjs",
+    "lien-secours": "node scripts/lien-secours.mjs",
     "dev:api": "npm run ensure-assets && npm run dev -w api",
     "typecheck": "npm run typecheck -w api && npm run typecheck -w front && npm run typecheck -w e2e",
     "test": "npm run ensure-assets && npm run test -w api && npm run test -w front",

@@ -49,7 +49,18 @@ export async function getValidationView(db: D1Database, token: string): Promise<
     )
     .bind(v.timesheet_id, v.mission_id)
     .all<{ date: string; activity: string; quantity: number }>();
+  const [days, interventions] = await db.batch([
+    db.prepare('SELECT date FROM on_call_days WHERE timesheet_id = ? AND mission_id = ? ORDER BY date').bind(v.timesheet_id, v.mission_id),
+    db
+      .prepare(
+        `SELECT date, start_time AS start, end_time AS "end", minutes, reason FROM interventions
+         WHERE timesheet_id = ? AND mission_id = ? ORDER BY date, start_time`,
+      )
+      .bind(v.timesheet_id, v.mission_id),
+  ]);
   return {
+    onCallDays: (days.results as Array<{ date: string }>).map((d) => d.date),
+    interventions: interventions.results as PublicValidationView['interventions'],
     consultant: v.consultant_name,
     month: v.month,
     mission: v.mission_label,

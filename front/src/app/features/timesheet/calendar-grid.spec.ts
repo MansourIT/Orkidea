@@ -36,7 +36,7 @@ describe('CalendarGrid', () => {
     expect(el.querySelectorAll('[data-date]')).toHaveLength(30);
     const c = cell(el, '2026-11-03');
     expect(c.getAttribute('aria-label')).toBe('mardi 3 novembre : Projet Alpha Développement, une demi-journée ; Congés payés, une demi-journée');
-    expect(c.textContent).toContain('1 j');
+    expect(c.textContent).toContain('DEV·CP'); // codes des deux demi-journées
     expect(c.style.background).toContain('linear-gradient');
     expect(cell(el, '2026-11-11').getAttribute('title')).toBe('Férié : Armistice 1918');
     // Un seul jour focusable (tabindex roving) : aujourd'hui.

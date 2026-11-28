@@ -44,7 +44,7 @@ const INITIALS = ['', 'L', 'M', 'M', 'J', 'V', 'S', 'D'];
                 <span class="flex items-center gap-2">
                   <span class="h-2.5 w-2.5 shrink-0 rounded-full" [style.background]="a.color" aria-hidden="true"></span>
                   <span class="min-w-0">
-                    <span class="block max-w-24 truncate text-xs font-semibold text-ink sm:max-w-40 sm:text-sm">{{ a.missionLabel ?? a.label }}</span>
+                    <span class="flex max-w-24 items-center gap-1 sm:max-w-40"><span class="shrink-0 rounded bg-slate-100 px-1 font-mono text-[10px] font-semibold leading-4 text-ink">{{ a.code }}</span><span class="truncate text-xs font-semibold text-ink sm:text-sm">{{ a.missionLabel ?? a.label }}</span></span>
                     <span class="block max-w-24 truncate text-xs text-ink-soft sm:max-w-40">{{ a.missionLabel ? a.label : 'Absence' }}{{ a.archived ? ' (archivée)' : '' }}</span>
                   </span>
                 </span>

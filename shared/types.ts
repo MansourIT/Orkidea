@@ -1,6 +1,7 @@
 // Types partagés entre le front Angular et l'API Worker.
 import type { AppSettings, DayRules, MissionCalendarOverrides } from './settings';
 import type { HolidayCode, HolidayRegion } from './holidays';
+import type { Intervention, OnCallDay, OnCallMission } from './astreintes';
 
 export type Role = 'consultant' | 'admin';
 
@@ -22,6 +23,8 @@ export interface Activity {
   missionLabel: string | null;
   clientName: string | null;
   label: string;
+  /** Code court affiché dans le calendrier (DEV, REU, CP…). */
+  code: string;
   kind: ActivityKind;
   color: string;
   /** Dates de la mission (null pour les absences ou mission sans fin). */
@@ -53,6 +56,11 @@ export interface Timesheet {
   status: TimesheetStatus;
   comment: string | null;
   entries: Entry[];
+  /** Jours d'astreinte et interventions du mois. */
+  onCall: OnCallDay[];
+  interventions: Intervention[];
+  /** Missions du consultant ouvertes à l'astreinte (vide : pas d'astreinte à saisir). */
+  onCallMissions: OnCallMission[];
   workingDays: number;
   validations: ValidationSummary[];
   submittedAt: string | null;
@@ -65,6 +73,9 @@ export interface Timesheet {
 export interface SaveTimesheetBody {
   entries: Entry[];
   comment?: string | null;
+  /** Absent : astreintes inchangées. */
+  onCall?: OnCallDay[];
+  interventions?: Intervention[];
 }
 
 export const EDITABLE_STATUSES: TimesheetStatus[] = ['BROUILLON', 'REJETE'];
@@ -162,13 +173,15 @@ export interface Mission extends MissionCalendarOverrides {
   clientValidation: boolean;
   validatorName: string | null;
   validatorEmail: string | null;
+  /** Astreintes possibles sur cette mission. */
+  onCall: boolean;
   /** Objet de la prestation, lieu, modalités d'exécution et délai de paiement (contrat de prestation). */
   purpose: string | null;
   location: string | null;
   terms: string | null;
   paymentTermsDays: number | null;
   active: boolean;
-  activities: Array<{ id: string; label: string; color: string; active: boolean }>;
+  activities: Array<{ id: string; label: string; code: string; color: string; active: boolean }>;
 }
 
 export type TimesheetEventAction = 'SOUMISSION' | 'VALIDATION_CLIENT' | 'REJET_CLIENT' | 'VALIDATION' | 'CLOTURE' | 'REOUVERTURE' | 'RELANCE';
@@ -194,6 +207,8 @@ export interface PublicValidationView {
   comment: string | null;
   totalDays: number;
   entries: Array<{ date: string; activity: string; quantity: number }>;
+  onCallDays: string[];
+  interventions: Array<{ date: string; start: string; end: string; minutes: number; reason: string | null }>;
 }
 
 /** Codes d'erreur stables renvoyés par l'API, en plus du message. */
@@ -206,6 +221,7 @@ export interface ApiError {
 }
 
 export type { HolidayCode, HolidayRegion };
+export type { Intervention, OnCallDay, OnCallMission };
 
 // ---------------------------------------------------------------- Modèles de contrat
 

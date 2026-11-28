@@ -154,7 +154,7 @@ export function sampleContractData(date: string): ContractData {
     consultant: { name: 'Alex Consultant', email: 'alex@exemple.fr', qualification: 'Architecte logiciel' },
     mission: {
       id: 'exemple', consultantId: 'exemple', consultant: 'Alex Consultant', clientId: 'exemple', client: 'Société Exemple SA', label: 'Mission exemple',
-      startDate: date, endDate: null, tjm: 650, clientValidation: true, validatorName: 'Claude Valideur', validatorEmail: 'valideur@exemple.fr', active: true,
+      startDate: date, endDate: null, tjm: 650, clientValidation: true, validatorName: 'Claude Valideur', validatorEmail: 'valideur@exemple.fr', onCall: false, active: true,
       weekendPolicy: null, holidayPolicy: null, workedHolidays: null, holidayRegion: null,
       purpose: 'Accompagnement à la refonte du système d’information', location: 'Lyon, deux jours de télétravail par semaine',
       terms: null, paymentTermsDays: 30, activities: [],

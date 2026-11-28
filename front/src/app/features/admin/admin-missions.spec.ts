@@ -17,9 +17,9 @@ const inDays = (n: number) => new Date(new Date(`${today}T00:00:00Z`).getTime() 
 
 const mission = (p: Partial<Mission>): Mission => ({
   id: 'm', consultantId: 'u-jd', consultant: 'Jean Dupont', clientId: 'c1', client: 'Client Alpha', label: 'Mission', startDate: '2026-01-01', endDate: null,
-  tjm: 500, clientValidation: false, validatorName: null, validatorEmail: null, active: true, weekendPolicy: null, holidayPolicy: null, workedHolidays: null, holidayRegion: null,
+  tjm: 500, clientValidation: false, validatorName: null, validatorEmail: null, onCall: false, active: true, weekendPolicy: null, holidayPolicy: null, workedHolidays: null, holidayRegion: null,
   purpose: null, location: null, terms: null, paymentTermsDays: null,
-  activities: [{ id: 'a', label: 'Développement', color: '#3B82F6', active: true }], ...p,
+  activities: [{ id: 'a', label: 'Développement', code: 'DEV', color: '#3B82F6', active: true }], ...p,
 });
 
 const MISSIONS: Mission[] = [

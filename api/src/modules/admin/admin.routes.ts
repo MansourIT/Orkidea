@@ -1,4 +1,5 @@
 import { createRoute } from '@hono/zod-openapi';
+import { ACTIVITY_CODE_HINT, ACTIVITY_CODE_RE, activityCode } from '../../../../shared/activity-code';
 import type { AdminUser, Client } from '../../../../shared/types';
 import { listEvents } from '../../core/audit';
 import { fail } from '../../core/errors';
@@ -351,6 +352,7 @@ const MissionFields = {
   clientValidation: z.boolean().optional(),
   validatorName: z.string().trim().max(120).nullable().optional(),
   validatorEmail: EmailSchema.nullable().optional(),
+  onCall: z.boolean().optional(),
   weekendPolicy: DayPolicySchema.nullable().optional(),
   holidayPolicy: DayPolicySchema.nullable().optional(),
   workedHolidays: z.array(HolidayCodeSchema).max(13).nullable().optional(),
@@ -377,6 +379,7 @@ const MissionPatch = z.object({
   clientValidation: MissionFields.clientValidation,
   validatorName: MissionFields.validatorName,
   validatorEmail: MissionFields.validatorEmail,
+  onCall: MissionFields.onCall,
   weekendPolicy: MissionFields.weekendPolicy,
   holidayPolicy: MissionFields.holidayPolicy,
   workedHolidays: MissionFields.workedHolidays,
@@ -431,8 +434,8 @@ adminRoutes.openapi(
     await c.env.DB.batch([
       c.env.DB.prepare(
         `INSERT INTO missions (id, consultant_id, client_id, label, start_date, end_date, tjm, client_validation, validator_name, validator_email,
-                               weekend_policy, holiday_policy, worked_holidays, holiday_region, purpose, location, terms, payment_terms_days)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                               weekend_policy, holiday_policy, worked_holidays, holiday_region, purpose, location, terms, payment_terms_days, on_call)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         id,
         b.consultantId,
@@ -452,8 +455,9 @@ adminRoutes.openapi(
         b.location ?? null,
         b.terms ?? null,
         b.paymentTermsDays ?? null,
+        b.onCall ? 1 : 0,
       ),
-      ...labels.map((label) => svc.newActivityStmt(c.env.DB, id, label, color)),
+      ...(await svc.codedActivities(c.env.DB, null, labels)).map(({ label, code }) => svc.newActivityStmt(c.env.DB, id, label, color, code)),
     ]);
     return c.json({ id }, 201);
   },
@@ -481,6 +485,7 @@ adminRoutes.openapi(
       clientValidation: pick('clientValidation', m.clientValidation) as boolean,
       validatorName: pick('validatorName', m.validatorName) as string | null,
       validatorEmail: pick('validatorEmail', m.validatorEmail) as string | null,
+      onCall: pick('onCall', m.onCall) as boolean,
       weekendPolicy: pick('weekendPolicy', m.weekendPolicy),
       holidayPolicy: pick('holidayPolicy', m.holidayPolicy),
       workedHolidays: pick('workedHolidays', m.workedHolidays),
@@ -496,7 +501,7 @@ adminRoutes.openapi(
       c.env.DB.prepare(
         `UPDATE missions SET label = ?, start_date = ?, end_date = ?, tjm = ?, client_validation = ?, validator_name = ?, validator_email = ?,
                 weekend_policy = ?, holiday_policy = ?, worked_holidays = ?, holiday_region = ?, purpose = ?, location = ?, terms = ?,
-                payment_terms_days = ?, active = ? WHERE id = ?`,
+                payment_terms_days = ?, on_call = ?, active = ? WHERE id = ?`,
       ).bind(
         next.label,
         next.startDate,
@@ -513,13 +518,14 @@ adminRoutes.openapi(
         next.location,
         next.terms,
         next.paymentTermsDays,
+        next.onCall ? 1 : 0,
         next.active ? 1 : 0,
         id,
       ),
     ];
     if (b.color) stmts.push(c.env.DB.prepare('UPDATE activities SET color = ? WHERE mission_id = ?').bind(b.color, id));
     const color = b.color ?? m.activities[0]?.color ?? '#3B82F6';
-    for (const label of b.addActivities ?? []) stmts.push(svc.newActivityStmt(c.env.DB, id, label, color));
+    for (const { label, code } of await svc.codedActivities(c.env.DB, id, b.addActivities ?? [])) stmts.push(svc.newActivityStmt(c.env.DB, id, label, color, code));
     await c.env.DB.batch(stmts);
     return c.json(await svc.getMission(c.env.DB, id), 200);
   },
@@ -531,18 +537,27 @@ adminRoutes.openapi(
     path: '/activities/{id}',
     tags: ['Admin'],
     summary: 'Modification / désactivation d’une activité de mission',
-    request: { params: IdParam, body: jsonBody(z.object({ label: z.string().trim().min(1).max(60).optional(), color: ColorSchema.optional(), active: z.boolean().optional() })) },
+    request: { params: IdParam, body: jsonBody(z.object({
+            label: z.string().trim().min(1).max(60).optional(),
+            code: z.string().trim().toUpperCase().regex(ACTIVITY_CODE_RE, `Code : ${ACTIVITY_CODE_HINT}`).optional(),
+            color: ColorSchema.optional(),
+            active: z.boolean().optional(),
+          })) },
     responses: { 200: ok('Modifiée'), 404: ok('Introuvable') },
   }),
   async (c) => {
     const { id } = c.req.valid('param');
     const b = c.req.valid('json');
-    const a = await c.env.DB.prepare('SELECT id, label, color, active FROM activities WHERE id = ? AND mission_id IS NOT NULL')
+    const a = await c.env.DB.prepare('SELECT id, mission_id, label, code, color, active FROM activities WHERE id = ? AND mission_id IS NOT NULL')
       .bind(id)
-      .first<{ id: string; label: string; color: string; active: number }>();
+      .first<{ id: string; mission_id: string; label: string; code: string | null; color: string; active: number }>();
     if (!a) throw fail(404, 'Activité introuvable (les types d’absence ne sont pas modifiables)');
-    const next = { label: b.label ?? a.label, color: b.color ?? a.color, active: b.active ?? !!a.active };
-    await c.env.DB.prepare('UPDATE activities SET label = ?, color = ?, active = ? WHERE id = ?').bind(next.label, next.color, next.active ? 1 : 0, id).run();
+    const code = b.code ?? activityCode(a.code, a.label);
+    if (b.code && (await svc.takenCodes(c.env.DB, a.mission_id, id)).includes(b.code)) throw fail(409, `Le code ${b.code} est déjà utilisé par une autre activité de la mission ou une absence`);
+    const next = { label: b.label ?? a.label, code, color: b.color ?? a.color, active: b.active ?? !!a.active };
+    await c.env.DB.prepare('UPDATE activities SET label = ?, code = ?, color = ?, active = ? WHERE id = ?')
+      .bind(next.label, b.code ?? a.code, next.color, next.active ? 1 : 0, id)
+      .run();
     return c.json({ id, ...next }, 200);
   },
 );

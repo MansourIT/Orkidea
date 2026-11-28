@@ -184,7 +184,7 @@ describe('modèle de démonstration', () => {
   };
   const mission: Mission = {
     id: 'm', consultantId: 'u', consultant: 'Jean Dupont', clientId: 'c', client: 'Client Alpha', label: 'Projet Alpha', startDate: '2026-12-01', endDate: null,
-    tjm: 650, clientValidation: true, validatorName: 'Marie Martin', validatorEmail: 'marie@alpha.fr', active: true,
+    tjm: 650, clientValidation: true, validatorName: 'Marie Martin', validatorEmail: 'marie@alpha.fr', onCall: false, active: true,
     weekendPolicy: null, holidayPolicy: null, workedHolidays: null, holidayRegion: null,
     purpose: 'Refonte de la plateforme de paiement', location: 'Paris', terms: null, paymentTermsDays: 30, activities: [],
   };

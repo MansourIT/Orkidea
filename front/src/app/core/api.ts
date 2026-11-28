@@ -15,6 +15,8 @@ import type {
   ContractTemplateDetail,
   ContractTemplateSummary,
   Entry,
+  Intervention,
+  OnCallDay,
   Mission,
   PublicValidationView,
   Timesheet,
@@ -34,6 +36,7 @@ export interface MissionInput extends MissionCalendarOverrides {
   clientValidation: boolean;
   validatorName: string | null;
   validatorEmail: string | null;
+  onCall: boolean;
   purpose: string | null;
   location: string | null;
   terms: string | null;
@@ -65,8 +68,8 @@ export class Api {
   summaries = (from?: string, to?: string) =>
     this.get<TimesheetSummary[]>('/api/timesheets', { ...(from ? { from } : {}), ...(to ? { to } : {}) });
   timesheet = (month: string) => this.get<Timesheet>(`/api/timesheets/${month}`);
-  saveTimesheet = (month: string, entries: Entry[], comment: string | null) =>
-    this.send<Timesheet>('PUT', `/api/timesheets/${month}`, { entries, comment });
+  saveTimesheet = (month: string, entries: Entry[], comment: string | null, onCall?: OnCallDay[], interventions?: Intervention[]) =>
+    this.send<Timesheet>('PUT', `/api/timesheets/${month}`, { entries, comment, onCall, interventions });
   submitTimesheet = (month: string) => this.send<Timesheet>('POST', `/api/timesheets/${month}/submit`);
   pdfUrl = (month: string) => `/api/timesheets/${month}/pdf`;
 
@@ -91,8 +94,8 @@ export class Api {
   clients = () => this.get<Client[]>('/api/admin/clients');
   createClient = (body: ClientInput) => this.send<{ id: string }>('POST', '/api/admin/clients', body);
   updateClient = (id: string, body: Partial<ClientInput>) => this.send<Client>('PATCH', `/api/admin/clients/${id}`, body);
-  updateActivity = (id: string, body: { label?: string; color?: string; active?: boolean }) =>
-    this.send<{ id: string; label: string; color: string; active: boolean }>('PATCH', `/api/admin/activities/${id}`, body);
+  updateActivity = (id: string, body: { label?: string; code?: string; color?: string; active?: boolean }) =>
+    this.send<{ id: string; label: string; code: string; color: string; active: boolean }>('PATCH', `/api/admin/activities/${id}`, body);
   missions = () => this.get<Mission[]>('/api/admin/missions');
   createMission = (body: MissionInput & { consultantId: string; clientId: string; color?: string; activities?: string[] }) =>
     this.send<{ id: string }>('POST', '/api/admin/missions', body);

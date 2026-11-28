@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { NgIcon } from '@ng-icons/core';
+import { formatMinutes } from '@shared/astreintes';
 import type { ApiErrorCode, PublicValidationView } from '@shared/types';
 import { WEEKDAY_NAMES, frDate } from '@shared/dates';
 import { Api, apiError } from '../../core/api';
@@ -90,6 +91,39 @@ const ERRORS: Partial<Record<ApiErrorCode, { title: string; text: string }>> = {
               </table></div>
             </section>
 
+            @if (v.onCallDays.length) {
+              <section class="card mt-5 overflow-hidden" aria-labelledby="astreintes-titre">
+                <h2 id="astreintes-titre" class="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 px-3 py-3 sm:px-5 font-semibold">
+                  Astreintes
+                  <span class="text-sm font-normal text-ink-soft">{{ v.onCallDays.length }} jour{{ v.onCallDays.length > 1 ? 's' : '' }} · {{ formatMinutes(interventionTotal(v)) }} d’intervention</span>
+                </h2>
+                <div class="overflow-x-auto"><table class="w-full text-sm">
+                  <thead class="bg-slate-50 text-left text-xs text-ink-soft">
+                    <tr>
+                      <th scope="col" class="px-3 py-2 sm:px-5 font-medium">Date</th>
+                      <th scope="col" class="px-3 py-2 sm:px-5 font-medium">Intervention</th>
+                      <th scope="col" class="px-3 py-2 sm:px-5 text-right font-medium">Durée</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (d of v.onCallDays; track d) {
+                      @let list = interventionsOn(v, d);
+                      @for (i of list.length ? list : [null]; track $index) {
+                        <tr class="border-t border-slate-100">
+                          <td class="px-3 py-2 whitespace-nowrap sm:px-5">@if ($first) { <span class="capitalize">{{ weekday(d).slice(0, 3) }}.</span> {{ frDate(d) }} }</td>
+                          <td class="px-3 py-2 sm:px-5">
+                            @if (i) { <span class="font-mono">{{ i.start }}–{{ i.end }}</span>@if (i.reason) { · {{ i.reason }} } }
+                            @else { <span class="text-ink-soft">Astreinte sans intervention</span> }
+                          </td>
+                          <td class="px-3 py-2 sm:px-5 text-right font-medium">{{ i ? formatMinutes(i.minutes) : '' }}</td>
+                        </tr>
+                      }
+                    }
+                  </tbody>
+                </table></div>
+              </section>
+            }
+
             <section class="mt-5" aria-live="polite">
               @if (done(); as d) {
                 <div [class]="d === 'VALIDE' ? 'alert-success' : 'alert-warning'" role="status">
@@ -147,6 +181,14 @@ const ERRORS: Partial<Record<ApiErrorCode, { title: string; text: string }>> = {
   `,
 })
 export class ValidationPage implements OnInit {
+  protected readonly formatMinutes = formatMinutes;
+  protected interventionTotal(v: PublicValidationView): number {
+    return v.interventions.reduce((n, i) => n + i.minutes, 0);
+  }
+  protected interventionsOn(v: PublicValidationView, date: string): PublicValidationView['interventions'] {
+    return v.interventions.filter((i) => i.date === date);
+  }
+
   private readonly api = inject(Api);
 
   readonly token = input.required<string>();
